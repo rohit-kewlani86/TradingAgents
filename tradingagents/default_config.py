@@ -11,6 +11,15 @@ DEFAULT_CONFIG = {
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
+    # Company mode: "listed" (default, public equity) or "pre_ipo" (private/IPO-ready).
+    # In pre_ipo mode the data tools route to pre-IPO adapters and the Market
+    # Analyst is replaced by the Pre-IPO Market & Valuation Analyst.
+    "company_mode": "listed",
+    # Pre-IPO company identity, used only when company_mode == "pre_ipo".
+    # Shape: {"name": str, "cik": str | None, "listed_ticker": str | None}.
+    # "listed_ticker" lets the reflection loop resolve realised return once the
+    # company actually lists; until then its decisions stay pending.
+    "pre_ipo_company": None,
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.4",

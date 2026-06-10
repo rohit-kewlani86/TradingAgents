@@ -19,12 +19,14 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: Dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
+        company_mode: str = "listed",
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
+        self.company_mode = company_mode
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -47,9 +49,18 @@ class GraphSetup:
         tool_nodes = {}
 
         if "market" in selected_analysts:
-            analyst_nodes["market"] = create_market_analyst(
-                self.quick_thinking_llm
-            )
+            # In pre-IPO mode there is no price history, so the technical
+            # Market Analyst is replaced by the Pre-IPO Valuation Analyst.
+            # Both write the same ``market_report`` slot, so downstream wiring
+            # (node label, tool loop, conditional edge) is unchanged.
+            if self.company_mode == "pre_ipo":
+                analyst_nodes["market"] = create_valuation_analyst(
+                    self.quick_thinking_llm
+                )
+            else:
+                analyst_nodes["market"] = create_market_analyst(
+                    self.quick_thinking_llm
+                )
             delete_nodes["market"] = create_msg_delete()
             tool_nodes["market"] = self.tool_nodes["market"]
 

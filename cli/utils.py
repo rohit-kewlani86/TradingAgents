@@ -10,6 +10,48 @@ console = Console()
 
 TICKER_INPUT_EXAMPLES = "Examples: SPY, CNC.TO, 7203.T, 0700.HK"
 
+
+def build_company_mode_config(is_pre_ipo: bool, company_name: str, listed_ticker: str) -> Dict:
+    """Map pre-IPO selections into the config fragment the graph consumes.
+
+    Returns the ``company_mode`` and ``pre_ipo_company`` keys. ``listed_ticker``
+    is the symbol the company is expected to trade under once it lists; it lets
+    the reflection loop resolve realised return after the IPO, and is ``None``
+    when unknown.
+    """
+    if not is_pre_ipo:
+        return {"company_mode": "listed", "pre_ipo_company": None}
+    return {
+        "company_mode": "pre_ipo",
+        "pre_ipo_company": {
+            "name": company_name,
+            "listed_ticker": listed_ticker.strip().upper() or None,
+        },
+    }
+
+
+def prompt_pre_ipo() -> Dict:
+    """Interactive prompt for pre-IPO mode. Returns a config fragment.
+
+    Asks whether the company is pre-IPO; if so, collects its name and an
+    optional expected listing ticker. Falls back to listed mode otherwise.
+    """
+    is_pre_ipo = questionary.confirm(
+        "Is this a pre-IPO / not-yet-listed company (e.g. SpaceX)?",
+        default=False,
+    ).ask()
+    if not is_pre_ipo:
+        return build_company_mode_config(False, "", "")
+
+    company_name = questionary.text(
+        "Enter the company name to analyze:",
+        validate=lambda x: len(x.strip()) > 0 or "Please enter a company name.",
+    ).ask()
+    listed_ticker = questionary.text(
+        "Expected listing ticker once it IPOs (optional, press Enter to skip):",
+    ).ask() or ""
+    return build_company_mode_config(True, company_name.strip(), listed_ticker)
+
 ANALYST_ORDER = [
     ("Market Analyst", AnalystType.MARKET),
     ("Social Media Analyst", AnalystType.SOCIAL),

@@ -38,6 +38,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.valuation_tools import get_valuation
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
@@ -68,6 +69,7 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        self.company_mode = self.config.get("company_mode", "listed")
 
         # Update the interface's config
         set_config(self.config)
@@ -114,6 +116,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            company_mode=self.company_mode,
         )
 
         self.propagator = Propagator()
@@ -154,15 +157,15 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
+        # In pre-IPO mode the "market" slot is the Valuation Analyst, which has
+        # no price/indicator tools (no public price exists) and instead uses
+        # valuation, fundamentals (EDGAR S-1), and news tools.
+        if self.company_mode == "pre_ipo":
+            market_node = ToolNode([get_valuation, get_fundamentals, get_news])
+        else:
+            market_node = ToolNode([get_stock_data, get_indicators])
         return {
-            "market": ToolNode(
-                [
-                    # Core stock data tools
-                    get_stock_data,
-                    # Technical indicators
-                    get_indicators,
-                ]
-            ),
+            "market": market_node,
             "social": ToolNode(
                 [
                     # News tools for social media analysis
@@ -226,6 +229,19 @@ class TradingAgentsGraph:
             )
             return None, None, None
 
+    def _resolution_symbol(self, ticker: str) -> Optional[str]:
+        """Return the market symbol to measure realised return against.
+
+        In listed mode that is the ticker itself. In pre-IPO mode there is no
+        tradeable symbol until the company lists, so we use the configured
+        ``listed_ticker`` if one is known, and ``None`` otherwise — signalling
+        that the decision must stay pending until the company goes public.
+        """
+        if self.company_mode != "pre_ipo":
+            return ticker
+        pre_ipo = self.config.get("pre_ipo_company") or {}
+        return pre_ipo.get("listed_ticker")
+
     def _resolve_pending_entries(self, ticker: str) -> None:
         """Resolve pending log entries for ticker at the start of a new run.
 
@@ -235,14 +251,22 @@ class TradingAgentsGraph:
 
         Trade-off: only same-ticker entries are resolved per run.  Entries for
         other tickers accumulate until that ticker is run again.
+
+        For pre-IPO companies the realised return is measured against the
+        configured ``listed_ticker`` once the company goes public; until then
+        (no ``listed_ticker``) resolution is skipped and the entry stays pending.
         """
+        symbol = self._resolution_symbol(ticker)
+        if symbol is None:
+            return
+
         pending = [e for e in self.memory_log.get_pending_entries() if e["ticker"] == ticker]
         if not pending:
             return
 
         updates = []
         for entry in pending:
-            raw, alpha, days = self._fetch_returns(ticker, entry["date"])
+            raw, alpha, days = self._fetch_returns(symbol, entry["date"])
             if raw is None:
                 continue  # price not available yet — try again next run
             reflection = self.reflector.reflect_on_final_decision(
@@ -305,7 +329,10 @@ class TradingAgentsGraph:
         # Initialize state — inject memory log context for PM.
         past_context = self.memory_log.get_past_context(company_name)
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, past_context=past_context
+            company_name,
+            trade_date,
+            past_context=past_context,
+            company_mode=self.company_mode,
         )
         args = self.propagator.get_graph_args()
 

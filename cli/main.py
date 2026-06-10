@@ -499,15 +499,19 @@ def get_user_selections():
             box_content += f"\n[dim]Default: {default}[/dim]"
         return Panel(box_content, border_style="blue", padding=(1, 2))
 
-    # Step 1: Ticker symbol
+    # Step 1: Company mode (listed vs pre-IPO), then the identifier
     console.print(
         create_question_box(
-            "Step 1: Ticker Symbol",
-            "Enter the exact ticker symbol to analyze, including exchange suffix when needed (examples: SPY, CNC.TO, 7203.T, 0700.HK)",
+            "Step 1: Company",
+            "Choose whether this is a listed stock or a pre-IPO company, then identify it",
             "SPY",
         )
     )
-    selected_ticker = get_ticker()
+    company_mode_cfg = prompt_pre_ipo()
+    if company_mode_cfg["company_mode"] == "pre_ipo":
+        selected_ticker = company_mode_cfg["pre_ipo_company"]["name"]
+    else:
+        selected_ticker = get_ticker()
 
     # Step 2: Analysis date
     default_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -598,6 +602,8 @@ def get_user_selections():
 
     return {
         "ticker": selected_ticker,
+        "company_mode": company_mode_cfg["company_mode"],
+        "pre_ipo_company": company_mode_cfg["pre_ipo_company"],
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
@@ -944,6 +950,8 @@ def run_analysis(checkpoint: bool = False):
     config["anthropic_effort"] = selections.get("anthropic_effort")
     config["output_language"] = selections.get("output_language", "English")
     config["checkpoint_enabled"] = checkpoint
+    config["company_mode"] = selections.get("company_mode", "listed")
+    config["pre_ipo_company"] = selections.get("pre_ipo_company")
 
     # Create stats callback handler for tracking LLM/tool calls
     stats_handler = StatsCallbackHandler()

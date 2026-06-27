@@ -116,6 +116,7 @@ _PROVIDER_CONFIG = {
     "qwen": ("https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY"),
     "glm": ("https://api.z.ai/api/paas/v4/", "ZHIPU_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+    "nvidia": ("https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
 }
 
@@ -154,6 +155,11 @@ class OpenAIClient(BaseLLMClient):
                 api_key = os.environ.get(api_key_env)
                 if api_key:
                     llm_kwargs["api_key"] = api_key
+                else:
+                    raise ValueError(
+                        f"{api_key_env} is not set; it is required for the "
+                        f"'{self.provider}' provider."
+                    )
             else:
                 llm_kwargs["api_key"] = "ollama"
         elif self.base_url:

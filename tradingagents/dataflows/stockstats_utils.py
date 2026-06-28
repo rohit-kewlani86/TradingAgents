@@ -45,6 +45,29 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
+def _latest_expected_trading_day(asof: pd.Timestamp) -> pd.Timestamp:
+    """Most recent weekday on or before ``asof`` (date-normalized).
+
+    Approximates the latest trading day. Market holidays may yield a date
+    with no data, which only triggers a harmless cache re-download.
+    """
+    day = asof.normalize()
+    while day.weekday() >= 5:  # Saturday=5, Sunday=6
+        day -= pd.Timedelta(days=1)
+    return day
+
+
+def _cache_is_stale(cached_max_date, asof: pd.Timestamp) -> bool:
+    """True if cached data is missing the latest expected trading day.
+
+    Guards against a same-day cache written before the most recent
+    session's bar was published by the data vendor.
+    """
+    if pd.isna(cached_max_date):
+        return True
+    return pd.Timestamp(cached_max_date).normalize() < _latest_expected_trading_day(asof)
+
+
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
@@ -73,10 +96,8 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
         f"{safe_symbol}-YFin-data-{start_str}-{end_str}.csv",
     )
 
-    if os.path.exists(data_file):
-        data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
-    else:
-        data = yf_retry(lambda: yf.download(
+    def _download_and_cache():
+        df = yf_retry(lambda: yf.download(
             symbol,
             start=start_str,
             end=end_str,
@@ -84,8 +105,18 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             progress=False,
             auto_adjust=True,
         ))
-        data = data.reset_index()
-        data.to_csv(data_file, index=False, encoding="utf-8")
+        df = df.reset_index()
+        df.to_csv(data_file, index=False, encoding="utf-8")
+        return df
+
+    if os.path.exists(data_file):
+        data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
+        asof = min(curr_date_dt, today_date)
+        cached_max = pd.to_datetime(data["Date"], errors="coerce").max()
+        if _cache_is_stale(cached_max, asof):
+            data = _download_and_cache()
+    else:
+        data = _download_and_cache()
 
     data = _clean_dataframe(data)
 

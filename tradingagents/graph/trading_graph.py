@@ -160,17 +160,27 @@ class TradingAgentsGraph:
         # In pre-IPO mode the "market" slot is the Valuation Analyst, which has
         # no price/indicator tools (no public price exists) and instead uses
         # valuation, fundamentals (EDGAR S-1), and news tools.
+        # Each tool node appends results to its analyst's private message
+        # channel so the four analysts can run their tool loops in parallel
+        # without clobbering a shared message history.
         if self.company_mode == "pre_ipo":
-            market_node = ToolNode([get_valuation, get_fundamentals, get_news])
+            market_node = ToolNode(
+                [get_valuation, get_fundamentals, get_news],
+                messages_key="market_messages",
+            )
         else:
-            market_node = ToolNode([get_stock_data, get_indicators])
+            market_node = ToolNode(
+                [get_stock_data, get_indicators],
+                messages_key="market_messages",
+            )
         return {
             "market": market_node,
             "social": ToolNode(
                 [
                     # News tools for social media analysis
                     get_news,
-                ]
+                ],
+                messages_key="social_messages",
             ),
             "news": ToolNode(
                 [
@@ -178,7 +188,8 @@ class TradingAgentsGraph:
                     get_news,
                     get_global_news,
                     get_insider_transactions,
-                ]
+                ],
+                messages_key="news_messages",
             ),
             "fundamentals": ToolNode(
                 [
@@ -187,7 +198,8 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
-                ]
+                ],
+                messages_key="fundamentals_messages",
             ),
         }
 

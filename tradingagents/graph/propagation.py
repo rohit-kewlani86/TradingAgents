@@ -25,6 +25,10 @@ class Propagator:
         """Create the initial state for the agent graph."""
         return {
             "messages": [("human", company_name)],
+            "market_messages": [("human", company_name)],
+            "social_messages": [("human", company_name)],
+            "news_messages": [("human", company_name)],
+            "fundamentals_messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "company_mode": company_mode,

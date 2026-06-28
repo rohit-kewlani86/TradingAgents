@@ -34,7 +34,7 @@ def test_catalog_includes_nvidia_models():
     nvidia_models = get_known_models()["nvidia"]
 
     assert "meta/llama-3.3-70b-instruct" in nvidia_models
-    assert "deepseek-ai/deepseek-r1" in nvidia_models
+    assert "nvidia/llama-3.3-nemotron-super-49b-v1.5" in nvidia_models
     assert "custom" in nvidia_models
 
 

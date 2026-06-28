@@ -69,14 +69,14 @@ Write a detailed, nuanced report with specific, actionable insights to help the 
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state["market_messages"])
 
         report = ""
         if len(result.tool_calls) == 0:
             report = result.content
 
         return {
-            "messages": [result],
+            "market_messages": [result],
             "market_report": report,
         }
 

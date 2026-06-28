@@ -13,7 +13,7 @@ def _state():
     return {
         "trade_date": "2026-01-15",
         "company_of_interest": "SpaceX",
-        "messages": [("human", "SpaceX")],
+        "market_messages": [("human", "SpaceX")],
     }
 
 

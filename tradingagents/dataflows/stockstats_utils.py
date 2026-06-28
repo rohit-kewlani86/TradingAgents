@@ -1,3 +1,4 @@
+import threading
 import time
 import logging
 
@@ -12,17 +13,27 @@ from .utils import safe_ticker_component
 
 logger = logging.getLogger(__name__)
 
+# Parallel analysts issue concurrent yfinance requests. Without a cap the
+# burst trips Yahoo's rate limiter, so all yfinance calls share one
+# process-wide concurrency budget enforced in ``yf_retry``.
+YF_MAX_CONCURRENCY = 3
+_yf_semaphore = threading.BoundedSemaphore(YF_MAX_CONCURRENCY)
+
 
 def yf_retry(func, max_retries=3, base_delay=2.0):
     """Execute a yfinance call with exponential backoff on rate limits.
 
     yfinance raises YFRateLimitError on HTTP 429 responses but does not
     retry them internally. This wrapper adds retry logic specifically
-    for rate limits. Other exceptions propagate immediately.
+    for rate limits. Other exceptions propagate immediately. A shared
+    semaphore bounds how many yfinance calls run at once so concurrent
+    analysts do not trip the rate limiter; backoff sleeps happen outside
+    the permit so a waiting call never blocks an idle slot.
     """
     for attempt in range(max_retries + 1):
         try:
-            return func()
+            with _yf_semaphore:
+                return func()
         except YFRateLimitError:
             if attempt < max_retries:
                 delay = base_delay * (2 ** attempt)

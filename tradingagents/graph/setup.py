@@ -10,6 +10,15 @@ from tradingagents.agents.utils.agent_states import AgentState
 from .conditional_logic import ConditionalLogic
 
 
+def _analyst_done(state):
+    """No-op barrier node marking an analyst's tool loop as finished.
+
+    Reports are written to state by the analyst itself; this node only
+    exists as a fan-in synchronization point for the Bull Researcher.
+    """
+    return {}
+
+
 class GraphSetup:
     """Handles the setup and configuration of the agent graph."""
 
@@ -45,7 +54,6 @@ class GraphSetup:
 
         # Create analyst nodes
         analyst_nodes = {}
-        delete_nodes = {}
         tool_nodes = {}
 
         if "market" in selected_analysts:
@@ -61,28 +69,24 @@ class GraphSetup:
                 analyst_nodes["market"] = create_market_analyst(
                     self.quick_thinking_llm
                 )
-            delete_nodes["market"] = create_msg_delete()
             tool_nodes["market"] = self.tool_nodes["market"]
 
         if "social" in selected_analysts:
             analyst_nodes["social"] = create_social_media_analyst(
                 self.quick_thinking_llm
             )
-            delete_nodes["social"] = create_msg_delete()
             tool_nodes["social"] = self.tool_nodes["social"]
 
         if "news" in selected_analysts:
             analyst_nodes["news"] = create_news_analyst(
                 self.quick_thinking_llm
             )
-            delete_nodes["news"] = create_msg_delete()
             tool_nodes["news"] = self.tool_nodes["news"]
 
         if "fundamentals" in selected_analysts:
             analyst_nodes["fundamentals"] = create_fundamentals_analyst(
                 self.quick_thinking_llm
             )
-            delete_nodes["fundamentals"] = create_msg_delete()
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
 
         # Create researcher and manager nodes
@@ -100,13 +104,17 @@ class GraphSetup:
         # Create workflow
         workflow = StateGraph(AgentState)
 
-        # Add analyst nodes to the graph
+        # Add analyst nodes to the graph. Each analyst gets a private "Done"
+        # barrier node: the analyst runs its tool loop in parallel, then exits
+        # to its Done node. A single list-edge from all Done nodes to the Bull
+        # Researcher makes the debate wait for every analyst to finish exactly
+        # once (a true fan-in barrier). Routing the analysts straight to the
+        # Bull Researcher instead would re-trigger it as each analyst finishes,
+        # colliding with the debate's writes to investment_debate_state.
         for analyst_type, node in analyst_nodes.items():
             workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
-            workflow.add_node(
-                f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
-            )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
+            workflow.add_node(f"{analyst_type.capitalize()} Done", _analyst_done)
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -119,30 +127,27 @@ class GraphSetup:
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
 
         # Define edges
-        # Start with the first analyst
-        first_analyst = selected_analysts[0]
-        workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
-
-        # Connect analysts in sequence
-        for i, analyst_type in enumerate(selected_analysts):
+        # Fan out: every analyst starts in parallel from START, runs its own
+        # tool-call loop on a private message channel, then exits to its Done
+        # node. The Bull Researcher joins on all Done nodes (barrier) so the
+        # debate begins only after every analyst has finished.
+        done_nodes = []
+        for analyst_type in selected_analysts:
             current_analyst = f"{analyst_type.capitalize()} Analyst"
             current_tools = f"tools_{analyst_type}"
-            current_clear = f"Msg Clear {analyst_type.capitalize()}"
+            current_done = f"{analyst_type.capitalize()} Done"
 
-            # Add conditional edges for current analyst
+            workflow.add_edge(START, current_analyst)
             workflow.add_conditional_edges(
                 current_analyst,
                 getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
-                [current_tools, current_clear],
+                [current_tools, current_done],
             )
             workflow.add_edge(current_tools, current_analyst)
+            done_nodes.append(current_done)
 
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
-            if i < len(selected_analysts) - 1:
-                next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
-                workflow.add_edge(current_clear, next_analyst)
-            else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+        # Fan in: the Bull Researcher waits for every analyst's Done node.
+        workflow.add_edge(done_nodes, "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

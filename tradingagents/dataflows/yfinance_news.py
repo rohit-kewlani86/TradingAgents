@@ -4,6 +4,7 @@ import yfinance as yf
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
+from .cache import disk_cache
 from .stockstats_utils import yf_retry
 
 
@@ -48,6 +49,7 @@ def _extract_article_data(article: dict) -> dict:
         }
 
 
+@disk_cache
 def get_news_yfinance(
     ticker: str,
     start_date: str,
@@ -104,6 +106,7 @@ def get_news_yfinance(
         return f"Error fetching news for {ticker}: {str(e)}"
 
 
+@disk_cache
 def get_global_news_yfinance(
     curr_date: str,
     look_back_days: int = 7,

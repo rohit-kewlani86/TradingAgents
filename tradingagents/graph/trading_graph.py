@@ -82,6 +82,12 @@ def _provider_kwargs(config: Dict[str, Any], tier: str) -> Dict[str, Any]:
     if max_tokens:
         kwargs["max_output_tokens" if provider == "google" else "max_tokens"] = max_tokens
 
+    # Per-tier temperature. Use `is not None` because 0.0 is a valid value.
+    temp_key = "quick_think_temperature" if tier == "quick" else "deep_think_temperature"
+    temperature = config.get(temp_key)
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
     return kwargs
 
 

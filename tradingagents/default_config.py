@@ -40,6 +40,12 @@ DEFAULT_CONFIG = {
     "quick_think_thinking_level": None,
     "quick_think_reasoning_effort": None,
     "quick_think_effort": None,
+    # Per-tier temperature. 0.0 pins the deep-tier judges to deterministic
+    # output; 0.3 keeps analyst prose varied while still reducing run-to-run
+    # variance. Providers that don't support temperature (e.g. o-series with
+    # fixed temp=1) silently ignore this value in their client.
+    "deep_think_temperature": 0.0,
+    "quick_think_temperature": 0.3,
     # Per-tier output caps (None = provider default). Bounds runaway responses
     # that would otherwise dominate wall-clock; keep the deep cap generous so a
     # judge's thinking + answer always fit.
@@ -51,9 +57,10 @@ DEFAULT_CONFIG = {
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
-    # Debate and discussion settings
-    "max_debate_rounds": 1,
-    "max_risk_discuss_rounds": 1,
+    # Debate and discussion settings. Two rounds give each side a rebuttal turn,
+    # building more stable consensus before the judges weigh in.
+    "max_debate_rounds": 2,
+    "max_risk_discuss_rounds": 2,
     "max_recur_limit": 100,
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)

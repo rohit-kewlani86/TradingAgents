@@ -45,6 +45,7 @@ class GoogleClient(BaseLLMClient):
         # Gemini 3 Flash: minimal, low, medium, high
         # Gemini 2.5: thinking_budget (0=disable, -1=dynamic)
         thinking_level = self.kwargs.get("thinking_level")
+        thinking_active = False
         if thinking_level:
             model_lower = self.model.lower()
             if "gemini-3" in model_lower:
@@ -52,9 +53,17 @@ class GoogleClient(BaseLLMClient):
                 if "pro" in model_lower and thinking_level == "minimal":
                     thinking_level = "low"
                 llm_kwargs["thinking_level"] = thinking_level
+                thinking_active = thinking_level not in ("minimal",)
             else:
                 # Gemini 2.5: map to thinking_budget
-                llm_kwargs["thinking_budget"] = -1 if thinking_level == "high" else 0
+                budget = -1 if thinking_level == "high" else 0
+                llm_kwargs["thinking_budget"] = budget
+                thinking_active = budget != 0
+
+        # Temperature is not accepted by Gemini when thinking is active.
+        temperature = self.kwargs.get("temperature")
+        if temperature is not None and not thinking_active:
+            llm_kwargs["temperature"] = temperature
 
         return NormalizedChatGoogleGenerativeAI(**llm_kwargs)
 

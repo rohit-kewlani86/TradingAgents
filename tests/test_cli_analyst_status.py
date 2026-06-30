@@ -30,6 +30,30 @@ def test_technical_analyst_in_progress_when_selected_and_no_report():
 
 
 @pytest.mark.unit
+def test_update_report_section_technical_does_not_crash():
+    """updating technical_report must not raise KeyError in _update_current_report."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical"])
+
+    # This crashed before the fix: KeyError: 'technical_report'
+    buf.update_report_section("technical_report", "RSI at 72, entry zone $450–$455.")
+
+    assert buf.current_report is not None
+    assert "Technical" in buf.current_report
+
+
+@pytest.mark.unit
+def test_final_report_includes_technical_report():
+    """technical_report content must appear in the assembled final report."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical"])
+    buf.update_report_section("technical_report", "RSI at 72, entry zone $450–$455.")
+
+    assert buf.final_report is not None
+    assert "RSI at 72" in buf.final_report
+
+
+@pytest.mark.unit
 def test_all_analyst_names_in_panel_team_list():
     """Every analyst in ANALYST_AGENT_NAMES must appear in the Analyst Team
     source list used by update_display — so adding a new analyst to the mapping

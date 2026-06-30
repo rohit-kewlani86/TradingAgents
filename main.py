@@ -9,8 +9,17 @@ load_dotenv()
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
 config["llm_provider"] = "google"
-config["deep_think_llm"] = "gemini-3.1-pro-preview"
-config["quick_think_llm"] = "gemini-3.1-flash-lite-preview"
+config["deep_think_llm"] = "gemini-2.5-pro"
+config["quick_think_llm"] = "gemini-2.5-flash"
+# Both tiers reason fully. An A/B eval showed disabling quick-tier thinking
+# saved ~15s but cut analysis quality ~35% (the Fundamentals analyst lost its
+# year-over-year statement deep dive), so the quick-tier override is left off.
+config["google_thinking_level"] = "high"
+# Cap output to stop a runaway analyst response (~60k tokens) from dominating
+# wall-clock. This is the real win: it tames the runaway with no quality loss.
+# Quick reports are 1-3k tokens; the deep judges keep ample room.
+config["quick_think_max_tokens"] = 8192
+config["deep_think_max_tokens"] = 32768
 config["max_debate_rounds"] = 1  # Increase debate rounds
 
 # Configure data vendors (default uses yfinance, no extra API keys needed)

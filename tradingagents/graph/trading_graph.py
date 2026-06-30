@@ -48,6 +48,43 @@ from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
 
+# Maps each provider's reasoning/thinking knob to (global_config_key,
+# quick_tier_override_key, llm_kwarg). The deep tier uses the global key; the
+# quick tier prefers its override and falls back to the global value. Quick
+# agents (analysts, debaters) rarely need extended reasoning, so lowering their
+# thinking budget cuts latency without touching the deep judges.
+_THINKING_KNOBS = {
+    "google": ("google_thinking_level", "quick_think_thinking_level", "thinking_level"),
+    "openai": ("openai_reasoning_effort", "quick_think_reasoning_effort", "reasoning_effort"),
+    "anthropic": ("anthropic_effort", "quick_think_effort", "effort"),
+}
+
+
+def _provider_kwargs(config: Dict[str, Any], tier: str) -> Dict[str, Any]:
+    """Provider-specific LLM kwargs for a tier ('deep' or 'quick')."""
+    provider = config.get("llm_provider", "").lower()
+    kwargs: Dict[str, Any] = {}
+
+    knob = _THINKING_KNOBS.get(provider)
+    if knob:
+        global_key, quick_key, llm_kwarg = knob
+        value = config.get(global_key)
+        if tier == "quick":
+            value = config.get(quick_key) or value
+        if value:
+            kwargs[llm_kwarg] = value
+
+    # Per-tier output cap. Bounds a runaway generation (one analyst can
+    # otherwise spiral into a ~60k-token response that dominates wall-clock).
+    max_tokens = config.get(
+        "quick_think_max_tokens" if tier == "quick" else "deep_think_max_tokens"
+    )
+    if max_tokens:
+        kwargs["max_output_tokens" if provider == "google" else "max_tokens"] = max_tokens
+
+    return kwargs
+
+
 class TradingAgentsGraph:
     """Main class that orchestrates the trading agents framework."""
 
@@ -78,24 +115,27 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
+        # Initialize LLMs with per-tier thinking configuration. The deep tier
+        # keeps full reasoning; the quick tier can lower its thinking budget.
+        deep_kwargs = self._get_provider_kwargs("deep")
+        quick_kwargs = self._get_provider_kwargs("quick")
 
         # Add callbacks to kwargs if provided (passed to LLM constructor)
         if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
+            deep_kwargs["callbacks"] = self.callbacks
+            quick_kwargs["callbacks"] = self.callbacks
 
         deep_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["deep_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **deep_kwargs,
         )
         quick_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["quick_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **quick_kwargs,
         )
 
         self.deep_thinking_llm = deep_client.get_llm()
@@ -133,27 +173,9 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
 
-    def _get_provider_kwargs(self) -> Dict[str, Any]:
-        """Get provider-specific kwargs for LLM client creation."""
-        kwargs = {}
-        provider = self.config.get("llm_provider", "").lower()
-
-        if provider == "google":
-            thinking_level = self.config.get("google_thinking_level")
-            if thinking_level:
-                kwargs["thinking_level"] = thinking_level
-
-        elif provider == "openai":
-            reasoning_effort = self.config.get("openai_reasoning_effort")
-            if reasoning_effort:
-                kwargs["reasoning_effort"] = reasoning_effort
-
-        elif provider == "anthropic":
-            effort = self.config.get("anthropic_effort")
-            if effort:
-                kwargs["effort"] = effort
-
-        return kwargs
+    def _get_provider_kwargs(self, tier: str = "deep") -> Dict[str, Any]:
+        """Get provider-specific kwargs for a given LLM tier ('deep' or 'quick')."""
+        return _provider_kwargs(self.config, tier)
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""

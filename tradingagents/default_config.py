@@ -30,10 +30,21 @@ DEFAULT_CONFIG = {
     # provider-specific URL here would leak (e.g. OpenAI's /v1 was previously
     # being forwarded to Gemini, producing malformed request URLs).
     "backend_url": None,
-    # Provider-specific thinking configuration
+    # Provider-specific thinking configuration (applies to the deep tier).
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
     "anthropic_effort": None,           # "high", "medium", "low"
+    # Quick-tier overrides: analysts/debaters rarely need extended reasoning,
+    # so a lower thinking budget here cuts latency without touching the deep
+    # judges. Each falls back to its global value above when None.
+    "quick_think_thinking_level": None,
+    "quick_think_reasoning_effort": None,
+    "quick_think_effort": None,
+    # Per-tier output caps (None = provider default). Bounds runaway responses
+    # that would otherwise dominate wall-clock; keep the deep cap generous so a
+    # judge's thinking + answer always fit.
+    "deep_think_max_tokens": None,
+    "quick_think_max_tokens": None,
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,

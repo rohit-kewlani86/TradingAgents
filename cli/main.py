@@ -828,7 +828,7 @@ def update_analyst_statuses(message_buffer, chunk):
     - When all analysts done, set Bull Researcher to in_progress
     """
     selected = message_buffer.selected_analysts
-    found_active = False
+    all_done = True
 
     for analyst_key in ANALYST_ORDER:
         if analyst_key not in selected:
@@ -844,16 +844,16 @@ def update_analyst_statuses(message_buffer, chunk):
         # Determine status from accumulated sections, not just current chunk
         has_report = bool(message_buffer.report_sections.get(report_key))
 
+        # Analysts run in parallel, so every analyst without a report yet is
+        # actively running, not waiting its turn.
         if has_report:
             message_buffer.update_agent_status(agent_name, "completed")
-        elif not found_active:
-            message_buffer.update_agent_status(agent_name, "in_progress")
-            found_active = True
         else:
-            message_buffer.update_agent_status(agent_name, "pending")
+            message_buffer.update_agent_status(agent_name, "in_progress")
+            all_done = False
 
     # When all analysts complete, transition research team to in_progress
-    if not found_active and selected:
+    if all_done and selected:
         if message_buffer.agent_status.get("Bull Researcher") == "pending":
             message_buffer.update_agent_status("Bull Researcher", "in_progress")
 
@@ -1040,9 +1040,9 @@ def run_analysis(checkpoint: bool = False):
         )
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Update agent status to in_progress for the first analyst
-        first_analyst = f"{selections['analysts'][0].value.capitalize()} Analyst"
-        message_buffer.update_agent_status(first_analyst, "in_progress")
+        # Analysts launch together, so mark all of them in_progress at the
+        # start (delegates to the tested status helper with an empty chunk).
+        update_analyst_statuses(message_buffer, {})
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Create spinner text

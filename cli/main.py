@@ -284,12 +284,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
 
     # Group agents by team - filter to only include agents in agent_status
     all_teams = {
-        "Analyst Team": [
-            "Market Analyst",
-            "Social Analyst",
-            "News Analyst",
-            "Fundamentals Analyst",
-        ],
+        "Analyst Team": _analyst_team_names(),
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
@@ -818,6 +813,15 @@ ANALYST_REPORT_MAP = {
     "fundamentals": "fundamentals_report",
     "technical": "technical_report",
 }
+
+
+def _analyst_team_names() -> list:
+    """Return the ordered list of analyst display names for the progress panel.
+
+    Derived from ANALYST_AGENT_NAMES so that adding a new analyst to that
+    mapping automatically makes it appear in the Rich UI panel.
+    """
+    return [ANALYST_AGENT_NAMES[k] for k in ANALYST_ORDER]
 
 
 def update_analyst_statuses(message_buffer, chunk):

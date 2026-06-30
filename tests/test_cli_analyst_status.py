@@ -1,6 +1,6 @@
 import pytest
 
-from cli.main import MessageBuffer, update_analyst_statuses
+from cli.main import MessageBuffer, update_analyst_statuses, ANALYST_AGENT_NAMES, _analyst_team_names
 
 
 @pytest.mark.unit
@@ -27,6 +27,19 @@ def test_technical_analyst_in_progress_when_selected_and_no_report():
     update_analyst_statuses(buf, {})
 
     assert buf.agent_status["Technical Analyst"] == "in_progress"
+
+
+@pytest.mark.unit
+def test_all_analyst_names_in_panel_team_list():
+    """Every analyst in ANALYST_AGENT_NAMES must appear in the Analyst Team
+    source list used by update_display — so adding a new analyst to the mapping
+    automatically makes it visible in the Rich progress panel."""
+    team_names = _analyst_team_names()
+    for key, display_name in ANALYST_AGENT_NAMES.items():
+        assert display_name in team_names, (
+            f"'{display_name}' (key={key!r}) is missing from _analyst_team_names(); "
+            "it will never appear in the UI progress panel"
+        )
 
 
 @pytest.mark.unit

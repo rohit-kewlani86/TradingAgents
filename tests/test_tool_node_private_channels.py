@@ -5,6 +5,7 @@ CHANNELS = [
     ("social", "social_messages"),
     ("news", "news_messages"),
     ("fundamentals", "fundamentals_messages"),
+    ("technical", "technical_messages"),
 ]
 
 

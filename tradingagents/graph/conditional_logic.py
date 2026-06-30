@@ -39,6 +39,13 @@ class ConditionalLogic:
             return "tools_fundamentals"
         return "Fundamentals Done"
 
+    def should_continue_technical(self, state: AgentState):
+        """Determine if technical analysis should continue."""
+        last_message = state["technical_messages"][-1]
+        if last_message.tool_calls:
+            return "tools_technical"
+        return "Technical Done"
+
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""
 

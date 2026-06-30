@@ -9,6 +9,7 @@ ANALYSTS = [
     ("social", "tools_social"),
     ("news", "tools_news"),
     ("fundamentals", "tools_fundamentals"),
+    ("technical", "tools_technical"),
 ]
 
 

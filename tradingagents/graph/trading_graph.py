@@ -223,6 +223,10 @@ class TradingAgentsGraph:
                 ],
                 messages_key="fundamentals_messages",
             ),
+            "technical": ToolNode(
+                [get_stock_data, get_indicators],
+                messages_key="technical_messages",
+            ),
         }
 
     def _fetch_returns(
@@ -417,6 +421,7 @@ class TradingAgentsGraph:
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
             "fundamentals_report": final_state["fundamentals_report"],
+            "technical_report": final_state.get("technical_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],

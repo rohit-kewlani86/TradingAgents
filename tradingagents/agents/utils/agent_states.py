@@ -58,6 +58,7 @@ class AgentState(MessagesState):
     social_messages: Annotated[list, add_messages]
     news_messages: Annotated[list, add_messages]
     fundamentals_messages: Annotated[list, add_messages]
+    technical_messages: Annotated[list, add_messages]
 
     # research step
     market_report: Annotated[str, "Report from the Market Analyst"]
@@ -66,6 +67,7 @@ class AgentState(MessagesState):
         str, "Report from the News Researcher of current world affairs"
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
+    technical_report: Annotated[str, "Report from the Technical Analyst"]
 
     # researcher team discussion step
     investment_debate_state: Annotated[

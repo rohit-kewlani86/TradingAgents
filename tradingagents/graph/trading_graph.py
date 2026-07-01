@@ -495,6 +495,7 @@ class TradingAgentsGraph:
                 "history": final_state["risk_debate_state"]["history"],
                 "judge_decision": final_state["risk_debate_state"]["judge_decision"],
             },
+            "devils_advocate_critique": final_state.get("devils_advocate_critique", ""),
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
             "position_sizing_plan": final_state.get("position_sizing_plan", ""),

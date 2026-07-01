@@ -68,6 +68,7 @@ class Propagator:
             "news_report": "",
             "technical_report": "",
             "macro_report": "",
+            "devils_advocate_critique": "",
             "position_sizing_plan": "",
         }
 

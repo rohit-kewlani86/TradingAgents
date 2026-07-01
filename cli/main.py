@@ -65,7 +65,7 @@ class MessageBuffer:
     FIXED_AGENTS = {
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
-        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
+        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
         "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
@@ -91,6 +91,7 @@ class MessageBuffer:
         "macro_report": ("macro", "Macro Analyst"),
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
+        "devils_advocate_critique": (None, "Devil's Advocate"),
         "final_trade_decision": (None, "Portfolio Manager"),
         "position_sizing_plan": (None, "Position Sizer"),
     }
@@ -202,6 +203,7 @@ class MessageBuffer:
                 "macro_report": "Macro Analysis",
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
+                "devils_advocate_critique": "Devil's Advocate",
                 "final_trade_decision": "Portfolio Management Decision",
                 "position_sizing_plan": "Position Sizing",
             }
@@ -253,6 +255,11 @@ class MessageBuffer:
         if self.report_sections.get("trader_investment_plan"):
             report_parts.append("## Trading Team Plan")
             report_parts.append(f"{self.report_sections['trader_investment_plan']}")
+
+        # Devil's Advocate (Red Team) critique
+        if self.report_sections.get("devils_advocate_critique"):
+            report_parts.append("## Devil's Advocate (Red Team)")
+            report_parts.append(f"{self.report_sections['devils_advocate_critique']}")
 
         # Portfolio Management Decision
         if self.report_sections.get("final_trade_decision"):
@@ -332,7 +339,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         ],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
-        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
+        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
         "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
@@ -834,6 +841,11 @@ def display_complete_report(final_state):
             for title, content in risk_reports:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
+        # Devil's Advocate (Red Team)
+        if final_state.get("devils_advocate_critique"):
+            console.print(Panel("[bold]Devil's Advocate (Red Team)[/bold]", border_style="red"))
+            console.print(Panel(Markdown(final_state["devils_advocate_critique"]), title="Devil's Advocate", border_style="blue", padding=(1, 2)))
+
         # V. Portfolio Manager Decision
         if risk.get("judge_decision"):
             console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
@@ -1249,6 +1261,18 @@ def run_analysis(checkpoint: bool | None = None):
                     message_buffer.update_agent_status("Neutral Analyst", "completed")
                     message_buffer.update_agent_status("Portfolio Manager", "completed")
                     message_buffer.update_agent_status("Position Sizer", "in_progress")
+
+            # Devil's Advocate - red-teams the decision after the risk debate,
+            # before the Portfolio Manager finalises.
+            if chunk.get("devils_advocate_critique"):
+                message_buffer.update_report_section(
+                    "devils_advocate_critique", chunk["devils_advocate_critique"]
+                )
+                for _risk_agent in ("Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"):
+                    message_buffer.update_agent_status(_risk_agent, "completed")
+                if message_buffer.agent_status.get("Devil's Advocate") != "completed":
+                    message_buffer.update_agent_status("Devil's Advocate", "completed")
+                    message_buffer.update_agent_status("Portfolio Manager", "in_progress")
 
             # Position Sizing - runs after the Portfolio Manager
             if chunk.get("position_sizing_plan"):

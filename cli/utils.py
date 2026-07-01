@@ -92,13 +92,35 @@ def detect_asset_type(ticker: str) -> AssetType:
 def filter_analysts_for_asset_type(
     analysts: list[AnalystType], asset_type: AssetType
 ) -> list[AnalystType]:
-    if asset_type != AssetType.CRYPTO:
-        return analysts
-    return [
-        analyst
-        for analyst in analysts
-        if analyst != AnalystType.FUNDAMENTALS
-    ]
+    if asset_type == AssetType.CRYPTO:
+        return [a for a in analysts if a != AnalystType.FUNDAMENTALS]
+    if asset_type == AssetType.PRE_IPO:
+        # A pre-IPO company has no price history, so technical analysis is
+        # impossible; the market slot is handled by the Valuation Analyst.
+        return [a for a in analysts if a != AnalystType.TECHNICAL]
+    return analysts
+
+
+def build_pre_ipo_config(
+    is_pre_ipo: bool, company_name: str, listed_ticker: str
+) -> dict:
+    """Map the CLI's pre-IPO selection into graph config.
+
+    Pre-IPO mode is signalled by ``asset_type == "pre_ipo"`` (reusing the
+    asset-type dimension), and ``pre_ipo_company`` carries the name plus the
+    optional symbol the company will list under so the reflection layer can
+    resolve the decision once it IPOs. ``listed_ticker`` is normalised to
+    ``None`` when blank.
+    """
+    if not is_pre_ipo:
+        return {"asset_type": "stock", "pre_ipo_company": None}
+    return {
+        "asset_type": "pre_ipo",
+        "pre_ipo_company": {
+            "name": company_name,
+            "listed_ticker": listed_ticker or None,
+        },
+    }
 
 
 def get_analysis_date() -> str:

@@ -1,5 +1,6 @@
 import datetime
 import os
+import sys
 import time
 from collections import deque
 from functools import wraps
@@ -20,6 +21,7 @@ from rich.text import Text
 
 from cli.announcements import display_announcements, fetch_announcements
 from cli.stats_handler import StatsCallbackHandler
+from cli.models import AssetType
 from cli.utils import (
     ask_anthropic_effort,
     ask_gemini_thinking_config,
@@ -28,6 +30,7 @@ from cli.utils import (
     ask_openai_reasoning_effort,
     ask_output_language,
     ask_qwen_region,
+    build_pre_ipo_config,
     confirm_ollama_endpoint,
     detect_asset_type,
     ensure_api_key,
@@ -571,6 +574,41 @@ def get_user_selections():
     )
     selected_ticker = get_ticker()
     asset_type = detect_asset_type(selected_ticker)
+
+    # A pre-IPO company has no ticker to auto-detect, so offer the mode
+    # explicitly on the non-crypto path. When chosen, the market slot becomes
+    # the Valuation Analyst and data comes from EDGAR/funding/news adapters.
+    # Non-interactive runs (tests, pipes) skip the prompt unless
+    # TRADINGAGENTS_PRE_IPO is set, matching the CLI's env-skip convention.
+    pre_ipo_company = None
+    if asset_type == AssetType.STOCK:
+        env_pre_ipo = os.environ.get("TRADINGAGENTS_PRE_IPO")
+        if env_pre_ipo is not None:
+            is_pre_ipo = env_pre_ipo.strip().lower() in ("1", "true", "yes")
+        elif sys.stdin.isatty():
+            is_pre_ipo = typer.confirm(
+                "Is this a pre-IPO / not-yet-listed company?", default=False
+            )
+        else:
+            is_pre_ipo = False
+
+        if is_pre_ipo:
+            company_name = os.environ.get(
+                "TRADINGAGENTS_PRE_IPO_COMPANY"
+            ) or (
+                typer.prompt("Company name", default=selected_ticker)
+                if sys.stdin.isatty()
+                else selected_ticker
+            )
+            listed_ticker = os.environ.get("TRADINGAGENTS_PRE_IPO_LISTED_TICKER") or (
+                typer.prompt("Expected listing ticker (leave blank if unknown)", default="")
+                if sys.stdin.isatty()
+                else ""
+            )
+            pre_ipo_cfg = build_pre_ipo_config(True, company_name, listed_ticker)
+            asset_type = AssetType.PRE_IPO
+            pre_ipo_company = pre_ipo_cfg["pre_ipo_company"]
+
     # Only announce when it's not the default stock path, to avoid printing
     # "stock" on every run.
     if asset_type.value != "stock":
@@ -743,6 +781,7 @@ def get_user_selections():
     return {
         "ticker": selected_ticker,
         "asset_type": asset_type.value,
+        "pre_ipo_company": pre_ipo_company,
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
@@ -1028,6 +1067,10 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
     config["anthropic_effort"] = selections.get("anthropic_effort")
     config["output_language"] = selections.get("output_language", "English")
+    # Pre-IPO mode: asset_type drives vendor routing + the analyst swap, and
+    # pre_ipo_company carries the name/listing symbol for reflection.
+    config["asset_type"] = selections.get("asset_type", "stock")
+    config["pre_ipo_company"] = selections.get("pre_ipo_company")
     # --checkpoint/--no-checkpoint overrides only when explicitly given; omitting
     # the flag preserves TRADINGAGENTS_CHECKPOINT_ENABLED / the default (#976).
     if checkpoint is not None:

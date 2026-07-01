@@ -15,3 +15,4 @@ class AnalystType(str, Enum):
 class AssetType(str, Enum):
     STOCK = "stock"
     CRYPTO = "crypto"
+    PRE_IPO = "pre_ipo"

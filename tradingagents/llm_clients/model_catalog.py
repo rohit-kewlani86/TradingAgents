@@ -78,6 +78,25 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
 }
 
 
+# NVIDIA NIM (integrate.api.nvidia.com/v1). IDs are namespaced (vendor/model)
+# exactly as the NIM API expects. Custom model ID stays available for any model
+# on the account not listed here.
+_NVIDIA_MODELS: dict[str, list[ModelOption]] = {
+    "quick": [
+        ("Llama 3.3 70B Instruct - Fast general-purpose flagship", "meta/llama-3.3-70b-instruct"),
+        ("Llama 3.1 8B Instruct - Lightweight, low latency", "meta/llama-3.1-8b-instruct"),
+        ("Qwen2.5 Coder 32B Instruct - Coding/tool-use focused", "qwen/qwen2.5-coder-32b-instruct"),
+        ("Custom model ID", "custom"),
+    ],
+    "deep": [
+        ("DeepSeek-R1 - Reasoning flagship", "deepseek-ai/deepseek-r1"),
+        ("Llama 3.1 405B Instruct - Largest general model", "meta/llama-3.1-405b-instruct"),
+        ("Llama 3.1 Nemotron 70B - NVIDIA-tuned reasoning", "nvidia/llama-3.1-nemotron-70b-instruct"),
+        ("Custom model ID", "custom"),
+    ],
+}
+
+
 MODEL_OPTIONS: ProviderModeOptions = {
     "openai": {
         "quick": [
@@ -185,7 +204,7 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "mistral": _CUSTOM_ONLY,
     "kimi": _CUSTOM_ONLY,
     "groq": _CUSTOM_ONLY,
-    "nvidia": _CUSTOM_ONLY,
+    "nvidia": _NVIDIA_MODELS,
     # Bedrock model IDs / cross-region inference profile IDs are user-specified.
     "bedrock": _CUSTOM_ONLY,
 }

@@ -103,6 +103,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # to the global ``temperature`` for that tier.
     "deep_think_temperature": 0.0,
     "quick_think_temperature": 0.3,
+    # Per-tier cap on generated tokens. None leaves the provider default in
+    # place; a value bounds a runaway generation (an analyst spiralling into a
+    # very large response that dominates wall-clock) without touching the deep
+    # judges. Maps to max_output_tokens on Google, max_tokens elsewhere.
+    "deep_think_max_tokens": None,
+    "quick_think_max_tokens": None,
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,

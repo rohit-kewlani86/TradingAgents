@@ -183,6 +183,15 @@ class TradingAgentsGraph:
         if temperature is not None and temperature != "":
             kwargs["temperature"] = float(temperature)
 
+        # Per-tier output cap: bounds a runaway generation without touching the
+        # deep judges. Maps to the provider-native kwarg (Google uses
+        # max_output_tokens). Only applied when a tier is given and set.
+        if tier in ("deep", "quick"):
+            max_tokens = self.config.get(f"{tier}_think_max_tokens")
+            if max_tokens:
+                key = "max_output_tokens" if provider == "google" else "max_tokens"
+                kwargs[key] = int(max_tokens)
+
         return kwargs
 
     def _create_tool_nodes(self) -> dict[str, ToolNode]:

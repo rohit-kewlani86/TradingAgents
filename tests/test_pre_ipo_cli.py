@@ -1,9 +1,15 @@
 """CLI maps pre-IPO selections into config (pure mapping; prompt is thin)."""
 
+from unittest.mock import patch
+
 import pytest
 
 from cli.models import AnalystType, AssetType
-from cli.utils import build_pre_ipo_config, filter_analysts_for_asset_type
+from cli.utils import (
+    build_pre_ipo_config,
+    filter_analysts_for_asset_type,
+    is_listed_security,
+)
 
 
 @pytest.mark.unit
@@ -25,6 +31,26 @@ class TestBuildPreIPOConfig:
             "asset_type": "pre_ipo",
             "pre_ipo_company": {"name": "SpaceX", "listed_ticker": "SPCX"},
         }
+
+
+@pytest.mark.unit
+class TestIsListedSecurity:
+    def test_resolves_means_listed(self):
+        with patch(
+            "cli.utils.resolve_instrument_identity",
+            return_value={"company_name": "Apple Inc.", "exchange": "NMS"},
+        ):
+            assert is_listed_security("AAPL") is True
+
+    def test_empty_resolution_means_not_listed(self):
+        with patch("cli.utils.resolve_instrument_identity", return_value={}):
+            assert is_listed_security("SPACEX") is False
+
+    def test_resolution_error_treated_as_not_listed(self):
+        with patch(
+            "cli.utils.resolve_instrument_identity", side_effect=RuntimeError("boom")
+        ):
+            assert is_listed_security("SPACEX") is False
 
 
 @pytest.mark.unit

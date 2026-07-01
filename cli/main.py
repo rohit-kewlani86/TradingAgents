@@ -35,6 +35,7 @@ from cli.utils import (
     detect_asset_type,
     ensure_api_key,
     get_ticker,
+    is_listed_security,
     prompt_openai_compatible_url,
     resolve_backend_url,
     select_analysts,
@@ -575,19 +576,28 @@ def get_user_selections():
     selected_ticker = get_ticker()
     asset_type = detect_asset_type(selected_ticker)
 
-    # A pre-IPO company has no ticker to auto-detect, so offer the mode
-    # explicitly on the non-crypto path. When chosen, the market slot becomes
-    # the Valuation Analyst and data comes from EDGAR/funding/news adapters.
-    # Non-interactive runs (tests, pipes) skip the prompt unless
-    # TRADINGAGENTS_PRE_IPO is set, matching the CLI's env-skip convention.
+    # Pre-IPO detection: a pre-IPO company has no tradable ticker, so we can't
+    # infer it from the symbol string. Instead we let the code decide from a
+    # best-effort identity lookup — a symbol that resolves to a listed
+    # instrument is not pre-IPO, so no question is asked. We only fall back to a
+    # confirm when the symbol does NOT resolve (which is what a real pre-IPO
+    # name like "SPACEX" looks like, but could also be a typo/throttle — hence a
+    # confirm, not silent classification). TRADINGAGENTS_PRE_IPO overrides for
+    # non-interactive runs; a plain non-TTY run defaults to not-pre-IPO.
     pre_ipo_company = None
     if asset_type == AssetType.STOCK:
         env_pre_ipo = os.environ.get("TRADINGAGENTS_PRE_IPO")
         if env_pre_ipo is not None:
             is_pre_ipo = env_pre_ipo.strip().lower() in ("1", "true", "yes")
+        elif is_listed_security(selected_ticker):
+            is_pre_ipo = False  # resolves to a listed instrument — not pre-IPO
         elif sys.stdin.isatty():
+            console.print(
+                f"[yellow]'{selected_ticker}' didn't resolve to a listed "
+                f"security.[/yellow]"
+            )
             is_pre_ipo = typer.confirm(
-                "Is this a pre-IPO / not-yet-listed company?", default=False
+                "Analyze it as a pre-IPO / not-yet-listed company?", default=False
             )
         else:
             is_pre_ipo = False

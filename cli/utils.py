@@ -6,6 +6,7 @@ from dotenv import find_dotenv, set_key
 from rich.console import Console
 
 from cli.models import AnalystType, AssetType
+from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
 from tradingagents.llm_clients.api_key_env import get_api_key_env
 from tradingagents.llm_clients.model_catalog import get_model_options
 
@@ -99,6 +100,22 @@ def filter_analysts_for_asset_type(
         # impossible; the market slot is handled by the Valuation Analyst.
         return [a for a in analysts if a != AnalystType.TECHNICAL]
     return analysts
+
+
+def is_listed_security(ticker: str) -> bool:
+    """Best-effort check that a symbol resolves to a recognized listed instrument.
+
+    Used to decide whether to offer pre-IPO analysis: a symbol that resolves to
+    a real company/exchange is listed (skip the prompt); one that returns no
+    identity may be pre-IPO. A failed lookup (rate-limit, network, unknown
+    symbol) returns False, which surfaces the confirm rather than silently
+    misclassifying — the safe direction, since a typo or throttle must never
+    auto-route a listed ticker into the pre-IPO pipeline.
+    """
+    try:
+        return bool(resolve_instrument_identity(ticker))
+    except Exception:
+        return False
 
 
 def build_pre_ipo_config(

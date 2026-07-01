@@ -80,3 +80,53 @@ def test_technical_analyst_in_cli_utils_order():
 
     keys = [key for _, key in ANALYST_ORDER]
     assert AnalystType.TECHNICAL in keys
+
+
+@pytest.mark.unit
+def test_macro_analyst_in_progress_when_selected_and_no_report():
+    """Macro Analyst should appear in_progress like the others when selected."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+
+    update_analyst_statuses(buf, {})
+
+    assert buf.agent_status["Macro Analyst"] == "in_progress"
+
+
+@pytest.mark.unit
+def test_macro_analyst_type_exists():
+    from cli.models import AnalystType
+
+    assert AnalystType.MACRO == "macro"
+
+
+@pytest.mark.unit
+def test_macro_analyst_in_cli_utils_order():
+    from cli.utils import ANALYST_ORDER
+    from cli.models import AnalystType
+
+    keys = [key for _, key in ANALYST_ORDER]
+    assert AnalystType.MACRO in keys
+
+
+@pytest.mark.unit
+def test_update_report_section_macro_does_not_crash():
+    """updating macro_report must not raise KeyError in _update_current_report."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+
+    buf.update_report_section("macro_report", "10y at 4.3% rising; VIX 18; net HEADWIND.")
+
+    assert buf.current_report is not None
+    assert "Macro" in buf.current_report
+
+
+@pytest.mark.unit
+def test_final_report_includes_macro_report():
+    """macro_report content must appear in the assembled final report."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+    buf.update_report_section("macro_report", "10y at 4.3% rising; VIX 18; net HEADWIND.")
+
+    assert buf.final_report is not None
+    assert "net HEADWIND" in buf.final_report

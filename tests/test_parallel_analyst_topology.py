@@ -6,7 +6,7 @@ from langgraph.graph import START
 import tradingagents.graph.setup as setup_mod
 from tradingagents.graph.conditional_logic import ConditionalLogic
 
-ANALYSTS = ["market", "social", "news", "fundamentals", "technical"]
+ANALYSTS = ["market", "social", "news", "fundamentals", "technical", "macro"]
 
 
 def _build_workflow(analysts):

@@ -38,7 +38,8 @@ class GraphSetup:
         self.company_mode = company_mode
 
     def setup_graph(
-        self, selected_analysts=["market", "social", "news", "fundamentals", "technical"]
+        self,
+        selected_analysts=["market", "social", "news", "fundamentals", "technical", "macro"],
     ):
         """Set up and compile the agent workflow graph.
 
@@ -49,6 +50,7 @@ class GraphSetup:
                 - "news": News analyst
                 - "fundamentals": Fundamentals analyst
                 - "technical": Technical analyst (entry/exit timing; skipped in pre-IPO mode)
+                - "macro": Macro/regime analyst (top-down rates/vol/dollar/sector context)
         """
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
@@ -95,6 +97,12 @@ class GraphSetup:
                 self.quick_thinking_llm
             )
             tool_nodes["technical"] = self.tool_nodes["technical"]
+
+        if "macro" in selected_analysts:
+            # Macro/regime context applies in both listed and pre-IPO mode, so
+            # unlike Technical it is not gated on company_mode.
+            analyst_nodes["macro"] = create_macro_analyst(self.quick_thinking_llm)
+            tool_nodes["macro"] = self.tool_nodes["macro"]
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)

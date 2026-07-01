@@ -96,7 +96,7 @@ class TradingAgentsGraph:
 
     def __init__(
         self,
-        selected_analysts=["market", "social", "news", "fundamentals"],
+        selected_analysts=["market", "social", "news", "fundamentals", "technical", "macro"],
         debug=False,
         config: Dict[str, Any] = None,
         callbacks: Optional[List] = None,
@@ -232,6 +232,10 @@ class TradingAgentsGraph:
             "technical": ToolNode(
                 [get_stock_data, get_indicators],
                 messages_key="technical_messages",
+            ),
+            "macro": ToolNode(
+                [get_stock_data, get_indicators, get_global_news],
+                messages_key="macro_messages",
             ),
         }
 
@@ -428,6 +432,7 @@ class TradingAgentsGraph:
             "news_report": final_state["news_report"],
             "fundamentals_report": final_state["fundamentals_report"],
             "technical_report": final_state.get("technical_report", ""),
+            "macro_report": final_state.get("macro_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],

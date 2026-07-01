@@ -30,6 +30,7 @@ class Propagator:
             "news_messages": [("human", company_name)],
             "fundamentals_messages": [("human", company_name)],
             "technical_messages": [("human", company_name)],
+            "macro_messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "company_mode": company_mode,
@@ -63,6 +64,7 @@ class Propagator:
             "sentiment_report": "",
             "news_report": "",
             "technical_report": "",
+            "macro_report": "",
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:

@@ -6,7 +6,8 @@ from tradingagents.agents.researchers.bull_researcher import create_bull_researc
 from tradingagents.agents.researchers.bear_researcher import create_bear_researcher
 
 
-def _make_state(technical_report="RSI: 68, MACD bullish crossover"):
+def _make_state(technical_report="RSI: 68, MACD bullish crossover",
+                macro_report="10y rising, VIX low, sector tailwind"):
     """Minimal AgentState-like dict for researcher tests."""
     return {
         "market_report": "Market report content",
@@ -14,6 +15,7 @@ def _make_state(technical_report="RSI: 68, MACD bullish crossover"):
         "news_report": "News report content",
         "fundamentals_report": "Fundamentals report content",
         "technical_report": technical_report,
+        "macro_report": macro_report,
         "investment_debate_state": {
             "history": "",
             "bull_history": "",
@@ -51,6 +53,26 @@ def test_bear_researcher_includes_technical_report_in_prompt():
     node(_make_state("RSI: 82, overbought — bearish divergence"))
     assert prompts, "LLM was never invoked"
     assert "RSI: 82, overbought — bearish divergence" in prompts[0]
+
+
+@pytest.mark.unit
+def test_bull_researcher_includes_macro_report_in_prompt():
+    """Bull researcher must pass macro_report content to its LLM prompt."""
+    prompts = []
+    node = create_bull_researcher(_make_llm(prompts))
+    node(_make_state(macro_report="Falling rates, risk-on regime — macro TAILWIND"))
+    assert prompts, "LLM was never invoked"
+    assert "Falling rates, risk-on regime — macro TAILWIND" in prompts[0]
+
+
+@pytest.mark.unit
+def test_bear_researcher_includes_macro_report_in_prompt():
+    """Bear researcher must pass macro_report content to its LLM prompt."""
+    prompts = []
+    node = create_bear_researcher(_make_llm(prompts))
+    node(_make_state(macro_report="Rising rates, strong dollar — macro HEADWIND"))
+    assert prompts, "LLM was never invoked"
+    assert "Rising rates, strong dollar — macro HEADWIND" in prompts[0]
 
 
 @pytest.mark.unit

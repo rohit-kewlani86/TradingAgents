@@ -8,6 +8,7 @@ CHANNELS = [
     "news_messages",
     "fundamentals_messages",
     "technical_messages",
+    "macro_messages",
 ]
 
 

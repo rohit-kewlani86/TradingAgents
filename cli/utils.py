@@ -58,6 +58,7 @@ ANALYST_ORDER = [
     ("News Analyst", AnalystType.NEWS),
     ("Fundamentals Analyst", AnalystType.FUNDAMENTALS),
     ("Technical Analyst", AnalystType.TECHNICAL),
+    ("Macro Analyst", AnalystType.MACRO),
 ]
 
 

@@ -10,6 +10,7 @@ ANALYSTS = [
     ("news", "tools_news"),
     ("fundamentals", "tools_fundamentals"),
     ("technical", "tools_technical"),
+    ("macro", "tools_macro"),
 ]
 
 

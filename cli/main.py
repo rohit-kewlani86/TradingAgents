@@ -57,6 +57,7 @@ class MessageBuffer:
         "news": "News Analyst",
         "fundamentals": "Fundamentals Analyst",
         "technical": "Technical Analyst",
+        "macro": "Macro Analyst",
     }
 
     # Report section mapping: section -> (analyst_key for filtering, finalizing_agent)
@@ -68,6 +69,7 @@ class MessageBuffer:
         "news_report": ("news", "News Analyst"),
         "fundamentals_report": ("fundamentals", "Fundamentals Analyst"),
         "technical_report": ("technical", "Technical Analyst"),
+        "macro_report": ("macro", "Macro Analyst"),
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
         "final_trade_decision": (None, "Portfolio Manager"),
@@ -177,6 +179,7 @@ class MessageBuffer:
                 "news_report": "News Analysis",
                 "fundamentals_report": "Fundamentals Analysis",
                 "technical_report": "Technical Analysis",
+                "macro_report": "Macro Analysis",
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
                 "final_trade_decision": "Portfolio Management Decision",
@@ -192,7 +195,7 @@ class MessageBuffer:
         report_parts = []
 
         # Analyst Team Reports - use .get() to handle missing sections
-        analyst_sections = ["market_report", "sentiment_report", "news_report", "fundamentals_report", "technical_report"]
+        analyst_sections = ["market_report", "sentiment_report", "news_report", "fundamentals_report", "technical_report", "macro_report"]
         if any(self.report_sections.get(section) for section in analyst_sections):
             report_parts.append("## Analyst Team Reports")
             if self.report_sections.get("market_report"):
@@ -214,6 +217,10 @@ class MessageBuffer:
             if self.report_sections.get("technical_report"):
                 report_parts.append(
                     f"### Technical Analysis\n{self.report_sections['technical_report']}"
+                )
+            if self.report_sections.get("macro_report"):
+                report_parts.append(
+                    f"### Macro Analysis\n{self.report_sections['macro_report']}"
                 )
 
         # Research Team Reports
@@ -803,13 +810,14 @@ def update_research_team_status(status):
 
 
 # Ordered list of analysts for status transitions
-ANALYST_ORDER = ["market", "social", "news", "fundamentals", "technical"]
+ANALYST_ORDER = ["market", "social", "news", "fundamentals", "technical", "macro"]
 ANALYST_AGENT_NAMES = {
     "market": "Market Analyst",
     "social": "Social Analyst",
     "news": "News Analyst",
     "fundamentals": "Fundamentals Analyst",
     "technical": "Technical Analyst",
+    "macro": "Macro Analyst",
 }
 ANALYST_REPORT_MAP = {
     "market": "market_report",
@@ -817,6 +825,7 @@ ANALYST_REPORT_MAP = {
     "news": "news_report",
     "fundamentals": "fundamentals_report",
     "technical": "technical_report",
+    "macro": "macro_report",
 }
 
 

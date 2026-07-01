@@ -220,6 +220,14 @@ class TradingAgentsGraph:
                     get_indicators,
                 ]
             ),
+            "macro": ToolNode(
+                [
+                    get_macro_indicators,
+                    get_stock_data,
+                    get_indicators,
+                    get_global_news,
+                ]
+            ),
         }
 
     def _resolve_benchmark(self, ticker: str) -> str:

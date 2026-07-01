@@ -17,6 +17,7 @@ from tradingagents.agents import (
     create_news_analyst,
     create_portfolio_manager,
     create_research_manager,
+    create_macro_analyst,
     create_sentiment_analyst,
     create_technical_analyst,
     create_trader,
@@ -63,6 +64,7 @@ class GraphSetup:
             "news": lambda: create_news_analyst(self.quick_thinking_llm),
             "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
             "technical": lambda: create_technical_analyst(self.quick_thinking_llm),
+            "macro": lambda: create_macro_analyst(self.quick_thinking_llm),
         }
 
         # Create researcher and manager nodes

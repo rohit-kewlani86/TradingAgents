@@ -57,6 +57,13 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         tool_node="tools_technical",
         report_key="technical_report",
     ),
+    "macro": AnalystNodeSpec(
+        key="macro",
+        agent_node="Macro Analyst",
+        clear_node="Msg Clear Macro",
+        tool_node="tools_macro",
+        report_key="macro_report",
+    ),
 }
 
 

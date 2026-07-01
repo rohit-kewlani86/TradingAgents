@@ -22,6 +22,7 @@ from tradingagents.agents import (
     create_sentiment_analyst,
     create_technical_analyst,
     create_trader,
+    create_valuation_analyst,
 )
 from tradingagents.agents.utils.agent_states import AgentState
 
@@ -47,12 +48,20 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
+        asset_type: str = "stock",
     ):
-        """Initialize with required components."""
+        """Initialize with required components.
+
+        ``asset_type`` selects the analyst mix. For ``"pre_ipo"`` the market
+        slot is filled by the Valuation Analyst (private-market reasoning)
+        instead of the Market Analyst, since a pre-listing company has no price
+        history; both write the same ``market_report`` on ``market_messages``.
+        """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
+        self.asset_type = asset_type
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals")
@@ -68,8 +77,17 @@ class GraphSetup:
         """
         plan = build_analyst_execution_plan(selected_analysts)
 
+        # Pre-IPO companies have no price history, so the market slot reasons
+        # about private valuation instead of technicals. Same node, channel,
+        # and report_key — only the analyst body differs.
+        market_factory = (
+            create_valuation_analyst
+            if self.asset_type == "pre_ipo"
+            else create_market_analyst
+        )
+
         analyst_factories = {
-            "market": lambda: create_market_analyst(self.quick_thinking_llm),
+            "market": lambda: market_factory(self.quick_thinking_llm),
             "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
             "news": lambda: create_news_analyst(self.quick_thinking_llm),
             "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),

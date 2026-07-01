@@ -27,6 +27,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_verified_market_snapshot,
     resolve_instrument_identity,
 )
+from tradingagents.agents.utils.valuation_tools import get_valuation
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import safe_ticker_component
@@ -53,6 +54,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        asset_type: str | None = None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -65,6 +67,14 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+
+        # Resolve the analysis mode. An explicit constructor arg wins; otherwise
+        # honour ``config["asset_type"]`` so callers can select pre-IPO mode
+        # purely through config. The value is written back into the config so
+        # the vendor router (``get_vendor``) sees it and routes fundamentals/
+        # news/valuation to the pre-IPO adapters.
+        self.asset_type = asset_type or self.config.get("asset_type", "stock")
+        self.config["asset_type"] = self.asset_type
 
         # Update the interface's config
         set_config(self.config)
@@ -115,6 +125,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            asset_type=self.asset_type,
         )
 
         self.propagator = Propagator(
@@ -176,18 +187,27 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
+        # In pre-IPO mode the market slot is the Valuation Analyst, whose tools
+        # are private-market (valuation/fundamentals/news) rather than price and
+        # technicals. The node key stays "market" so topology wiring is unchanged.
+        # ``getattr`` keeps this callable unbound (self=None) as some tests do.
+        if getattr(self, "asset_type", "stock") == "pre_ipo":
+            market_tools = [get_valuation, get_fundamentals, get_news]
+        else:
+            market_tools = [
+                # Core stock data tools
+                get_stock_data,
+                # Technical indicators
+                get_indicators,
+                # Deterministic verification snapshot (bound to the analyst
+                # LLM and required by its prompt; must be executable here or
+                # the call fails and the model reports it "unavailable").
+                get_verified_market_snapshot,
+            ]
+
         return {
             "market": ToolNode(
-                [
-                    # Core stock data tools
-                    get_stock_data,
-                    # Technical indicators
-                    get_indicators,
-                    # Deterministic verification snapshot (bound to the analyst
-                    # LLM and required by its prompt; must be executable here or
-                    # the call fails and the model reports it "unavailable").
-                    get_verified_market_snapshot,
-                ],
+                market_tools,
                 messages_key="market_messages",
             ),
             "social": ToolNode(
@@ -302,6 +322,20 @@ class TradingAgentsGraph:
             )
             return None, None, None
 
+    def _resolution_symbol(self, ticker: str) -> str | None:
+        """The tradable symbol a decision's realized return is measured against.
+
+        For listed instruments this is the ticker itself. For a pre-IPO company
+        there is no tradable market yet, so returns cannot be computed until it
+        lists — we resolve against ``pre_ipo_company["listed_ticker"]`` once
+        known, and return ``None`` while it is still private (the caller then
+        leaves the decision pending).
+        """
+        if self.asset_type == "pre_ipo":
+            pre_ipo = self.config.get("pre_ipo_company") or {}
+            return pre_ipo.get("listed_ticker")
+        return ticker
+
     def _resolve_pending_entries(self, ticker: str) -> None:
         """Resolve pending log entries for ticker at the start of a new run.
 
@@ -312,15 +346,21 @@ class TradingAgentsGraph:
         Trade-off: only same-ticker entries are resolved per run.  Entries for
         other tickers accumulate until that ticker is run again.
         """
+        # A pre-IPO company that has not listed has no price series to score
+        # against, so its decisions stay pending until it IPOs.
+        symbol = self._resolution_symbol(ticker)
+        if symbol is None:
+            return
+
         pending = [e for e in self.memory_log.get_pending_entries() if e["ticker"] == ticker]
         if not pending:
             return
 
-        benchmark = self._resolve_benchmark(ticker)
+        benchmark = self._resolve_benchmark(symbol)
         updates = []
         for entry in pending:
             raw, alpha, days = self._fetch_returns(
-                ticker, entry["date"], benchmark=benchmark,
+                symbol, entry["date"], benchmark=benchmark,
             )
             if raw is None:
                 continue  # price not available yet — try again next run

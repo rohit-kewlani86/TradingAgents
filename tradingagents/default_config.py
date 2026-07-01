@@ -106,6 +106,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,
+    # Pre-IPO analysis. The mode itself is signalled by ``asset_type == "pre_ipo"``;
+    # this holds the extra identity a ticker cannot carry: the company name and,
+    # optionally, the symbol it will list under. ``listed_ticker`` lets the
+    # reflection layer resolve a pending pre-IPO decision once the company IPOs.
+    # ``{"name": "SpaceX", "listed_ticker": "SPCX" | None}`` or None when listed.
+    "pre_ipo_company": None,
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",

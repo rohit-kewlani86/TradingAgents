@@ -31,6 +31,7 @@ def create_portfolio_manager(llm):
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+        devils_advocate_critique = state.get("devils_advocate_critique", "")
 
         past_context = state.get("past_context", "")
         lessons_line = (
@@ -59,9 +60,12 @@ def create_portfolio_manager(llm):
 **Risk Analysts Debate History:**
 {history}
 
+**Devil's Advocate (Red Team) critique — weigh this before finalising:**
+{devils_advocate_critique}
+
 ---
 
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts. Explicitly address the Devil's Advocate's strongest points — either rebut them or adjust the decision.{get_language_instruction()}"""
 
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,

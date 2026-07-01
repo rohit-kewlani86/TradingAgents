@@ -116,6 +116,7 @@ class GraphSetup:
         conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
         portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
         position_sizer_node = create_position_sizer(self.quick_thinking_llm)
+        devils_advocate_node = create_devils_advocate(self.deep_thinking_llm)
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -140,6 +141,7 @@ class GraphSetup:
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
         workflow.add_node("Conservative Analyst", conservative_analyst)
+        workflow.add_node("Devil's Advocate", devils_advocate_node)
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
         workflow.add_node("Position Sizer", position_sizer_node)
 
@@ -190,7 +192,7 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Conservative Analyst": "Conservative Analyst",
-                "Portfolio Manager": "Portfolio Manager",
+                "Devil's Advocate": "Devil's Advocate",
             },
         )
         workflow.add_conditional_edges(
@@ -198,7 +200,7 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Neutral Analyst": "Neutral Analyst",
-                "Portfolio Manager": "Portfolio Manager",
+                "Devil's Advocate": "Devil's Advocate",
             },
         )
         workflow.add_conditional_edges(
@@ -206,11 +208,14 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Aggressive Analyst": "Aggressive Analyst",
-                "Portfolio Manager": "Portfolio Manager",
+                "Devil's Advocate": "Devil's Advocate",
             },
         )
 
-        # The Position Sizer turns the PM's rating into a placeable order, then ends.
+        # The Devil's Advocate red-teams the emerging decision, then the Portfolio
+        # Manager finalises it, and the Position Sizer turns the rating into a
+        # placeable order before the graph ends.
+        workflow.add_edge("Devil's Advocate", "Portfolio Manager")
         workflow.add_edge("Portfolio Manager", "Position Sizer")
         workflow.add_edge("Position Sizer", END)
 

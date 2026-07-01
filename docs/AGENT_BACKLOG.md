@@ -20,18 +20,11 @@ Each agent extends the platform along one of three axes:
 | Technical Analyst | actionable | Entry/exit timing, RSI/MACD/Bollinger/ATR, ATR-based stops/targets. Gated off in pre-IPO mode (no price history). |
 | Macro / Regime Analyst | coverage | Top-down rates (`^TNX`), volatility (`^VIX`), dollar (`DX-Y.NYB`), market trend (`^GSPC`), sector rotation (sector ETFs). Runs in listed and pre-IPO mode. No new data vendor. |
 | Position Sizing Agent | actionable | Decision node after the Portfolio Manager (`PM → Position Sizer → END`). Converts the rating into a placeable order — size %, entry, ATR-based stop, target, risk/reward. Structured output (`PositionSizingPlan`). Consumes Technical ATR + Macro VIX regime + risk-debate conviction. Always on. No new data vendor. |
+| Devil's Advocate / Red Team | accuracy | Node between the risk debate and the Portfolio Manager (`risk debate → Devil's Advocate → PM → Position Sizer → END`). Pre-mortem stress-test of the emerging consensus for groupthink; the PM must address its critique. Deep tier, free-text prose. Always on. No new data vendor. |
 
 ## Tier 1 — build next (no new data, high leverage)
 
-### 1. Devil's Advocate / Red Team — *accuracy* — RECOMMENDED NEXT
-Bull and bear each argue to win their side; nobody stress-tests the *final*
-decision for groupthink. A red-team node before the Portfolio Manager ("what
-must be true for this to be wrong?"). Reinforces the determinism/variance work.
-Zero new data.
-
-## Tier 2 — solid, mostly no new data
-
-### 2. Scenario Analyst — *accuracy + actionable*
+### 1. Scenario Analyst — *accuracy + actionable* — RECOMMENDED NEXT
 Quantified bull/base/bear price targets with rough probabilities and expected
 value. Distinct from the qualitative research debate (prose, not numbers). Rides
 existing data. Scope the mandate carefully to avoid restating the debate.

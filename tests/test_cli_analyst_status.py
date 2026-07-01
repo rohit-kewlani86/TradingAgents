@@ -149,6 +149,44 @@ def test_final_report_includes_position_sizing():
 
 
 @pytest.mark.unit
+def test_devils_advocate_in_agent_status_after_init():
+    """Devil's Advocate is a fixed (always-run) agent, so it must show in the panel."""
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+
+    assert "Devil's Advocate" in buf.agent_status
+
+
+@pytest.mark.unit
+def test_devils_advocate_in_panel_team_list():
+    from cli.main import MessageBuffer as MB
+
+    team_agents = [a for agents in MB.FIXED_AGENTS.values() for a in agents]
+    assert "Devil's Advocate" in team_agents
+
+
+@pytest.mark.unit
+def test_update_report_section_devils_advocate_does_not_crash():
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+
+    buf.update_report_section("devils_advocate_critique", "Pre-mortem: rates risk underweighted.")
+
+    assert buf.current_report is not None
+    assert "Devil's Advocate" in buf.current_report
+
+
+@pytest.mark.unit
+def test_final_report_includes_devils_advocate():
+    buf = MessageBuffer()
+    buf.init_for_analysis(["market", "social", "news", "fundamentals", "technical", "macro"])
+    buf.update_report_section("devils_advocate_critique", "Pre-mortem: rates risk underweighted.")
+
+    assert buf.final_report is not None
+    assert "rates risk underweighted" in buf.final_report
+
+
+@pytest.mark.unit
 def test_update_report_section_macro_does_not_crash():
     """updating macro_report must not raise KeyError in _update_current_report."""
     buf = MessageBuffer()

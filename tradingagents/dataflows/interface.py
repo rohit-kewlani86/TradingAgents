@@ -19,6 +19,7 @@ from .errors import (
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from . import preipo
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
     get_cashflow as get_yfinance_cashflow,
@@ -63,6 +64,12 @@ TOOLS_CATEGORIES = {
             "get_insider_transactions",
         ]
     },
+    "valuation_data": {
+        "description": "Pre-IPO valuation: funding rounds, secondary marks, comps",
+        "tools": [
+            "get_valuation",
+        ]
+    },
     "macro_data": {
         "description": "Macroeconomic indicators (rates, inflation, labor, growth)",
         "tools": [
@@ -82,6 +89,7 @@ VENDOR_LIST = [
     "fred",
     "polymarket",
     "alpha_vantage",
+    "pre_ipo",
 ]
 
 # Optional enrichment categories. These add macro/event context to the news
@@ -107,31 +115,42 @@ VENDOR_METHODS = {
     "get_fundamentals": {
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
+        "pre_ipo": preipo.get_fundamentals,
     },
     "get_balance_sheet": {
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
+        "pre_ipo": preipo.get_balance_sheet,
     },
     "get_cashflow": {
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
+        "pre_ipo": preipo.get_cashflow,
     },
     "get_income_statement": {
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
+        "pre_ipo": preipo.get_income_statement,
     },
     # news_data
     "get_news": {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
+        "pre_ipo": preipo.get_news,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
+        "pre_ipo": preipo.get_global_news,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
+        "pre_ipo": preipo.get_insider_transactions,
+    },
+    # valuation_data (pre-IPO only)
+    "get_valuation": {
+        "pre_ipo": preipo.get_valuation,
     },
     # macro_data
     "get_macro_indicators": {
@@ -150,11 +169,25 @@ def get_category_for_method(method: str) -> str:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
 
+# Categories whose data source flips to the pre-IPO adapters when analysing a
+# company that has not yet listed (``asset_type == "pre_ipo"``). Prices and
+# technical indicators do not exist pre-listing, so those categories are not
+# routed here — the graph drops the technical analyst and swaps the market
+# analyst for the valuation analyst instead.
+_PRE_IPO_CATEGORIES = {"fundamental_data", "news_data", "valuation_data"}
+
+
 def get_vendor(category: str, method: str = None) -> str:
     """Get the configured vendor for a data category or specific tool method.
     Tool-level configuration takes precedence over category-level.
     """
     config = get_config()
+
+    # Pre-IPO mode overrides the configured public-equity vendor for the
+    # categories that have a private-company equivalent, so the analysts read
+    # EDGAR/funding/web-search data instead of (absent) listed-market data.
+    if config.get("asset_type") == "pre_ipo" and category in _PRE_IPO_CATEGORIES:
+        return "pre_ipo"
 
     # Check tool-level configuration first (if method provided)
     if method:

@@ -32,7 +32,7 @@ from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.llm_clients import create_llm_client
+from tradingagents.llm_clients.fallback import build_tier_llm
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -94,21 +94,18 @@ class TradingAgentsGraph:
             deep_kwargs["callbacks"] = self.callbacks
             quick_kwargs["callbacks"] = self.callbacks
 
-        deep_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["deep_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **deep_kwargs,
+        # Each tier is a FallbackLLM over its catalog: the selected model is
+        # tried first, then the other catalog models for that tier, so a failed
+        # model call falls through to the next available model and the run only
+        # breaks when every model in the tier is failing.
+        provider = self.config["llm_provider"]
+        base_url = self.config.get("backend_url")
+        self.deep_thinking_llm = build_tier_llm(
+            provider, self.config["deep_think_llm"], "deep", base_url, deep_kwargs
         )
-        quick_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["quick_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **quick_kwargs,
+        self.quick_thinking_llm = build_tier_llm(
+            provider, self.config["quick_think_llm"], "quick", base_url, quick_kwargs
         )
-
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
 
         self.memory_log = TradingMemoryLog(self.config)
 

@@ -215,6 +215,17 @@ def get_model_options(provider: str, mode: str) -> list[ModelOption]:
     return MODEL_OPTIONS[provider.lower()][mode]
 
 
+def get_catalog_model_ids(provider: str, mode: str) -> list[str]:
+    """Concrete model IDs for a provider+tier, in catalog order, minus the
+    ``custom`` sentinel. Empty when the provider has no catalog entry. Used to
+    build the per-tier fallback chain.
+    """
+    mode_options = MODEL_OPTIONS.get(provider.lower())
+    if not mode_options:
+        return []
+    return [value for _, value in mode_options.get(mode, []) if value != "custom"]
+
+
 def get_known_models() -> dict[str, list[str]]:
     """Build known model names from the shared CLI catalog."""
     return {

@@ -66,7 +66,7 @@ class MessageBuffer:
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
-        "Portfolio Management": ["Portfolio Manager"],
+        "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
     # Analyst name mapping
@@ -92,6 +92,7 @@ class MessageBuffer:
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
         "final_trade_decision": (None, "Portfolio Manager"),
+        "position_sizing_plan": (None, "Position Sizer"),
     }
 
     def __init__(self, max_length=100):
@@ -202,6 +203,7 @@ class MessageBuffer:
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
                 "final_trade_decision": "Portfolio Management Decision",
+                "position_sizing_plan": "Position Sizing",
             }
             self.current_report = (
                 f"### {section_titles[latest_section]}\n{latest_content}"
@@ -256,6 +258,11 @@ class MessageBuffer:
         if self.report_sections.get("final_trade_decision"):
             report_parts.append("## Portfolio Management Decision")
             report_parts.append(f"{self.report_sections['final_trade_decision']}")
+
+        # Position Sizing
+        if self.report_sections.get("position_sizing_plan"):
+            report_parts.append("## Position Sizing")
+            report_parts.append(f"{self.report_sections['position_sizing_plan']}")
 
         self.final_report = "\n\n".join(report_parts) if report_parts else None
 
@@ -326,7 +333,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
-        "Portfolio Management": ["Portfolio Manager"],
+        "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
     # Filter teams to only include agents that are in agent_status
@@ -832,6 +839,11 @@ def display_complete_report(final_state):
             console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
             console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
 
+        # VI. Position Sizing
+        if final_state.get("position_sizing_plan"):
+            console.print(Panel("[bold]VI. Position Sizing[/bold]", border_style="green"))
+            console.print(Panel(Markdown(final_state["position_sizing_plan"]), title="Position Sizer", border_style="blue", padding=(1, 2)))
+
 
 def update_research_team_status(status):
     """Update status for research team members (not Trader)."""
@@ -1236,6 +1248,14 @@ def run_analysis(checkpoint: bool | None = None):
                     message_buffer.update_agent_status("Conservative Analyst", "completed")
                     message_buffer.update_agent_status("Neutral Analyst", "completed")
                     message_buffer.update_agent_status("Portfolio Manager", "completed")
+                    message_buffer.update_agent_status("Position Sizer", "in_progress")
+
+            # Position Sizing - runs after the Portfolio Manager
+            if chunk.get("position_sizing_plan"):
+                message_buffer.update_report_section(
+                    "position_sizing_plan", chunk["position_sizing_plan"]
+                )
+                message_buffer.update_agent_status("Position Sizer", "completed")
 
             # Update the display
             update_display(layout, stats_handler=stats_handler, start_time=start_time)

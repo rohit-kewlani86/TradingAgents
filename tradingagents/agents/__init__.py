@@ -8,6 +8,7 @@ from .analysts.sentiment_analyst import (
     create_social_media_analyst,  # deprecated alias kept for back-compat
 )
 from .managers.portfolio_manager import create_portfolio_manager
+from .managers.position_sizer import create_position_sizer
 from .managers.research_manager import create_research_manager
 from .researchers.bear_researcher import create_bear_researcher
 from .researchers.bull_researcher import create_bull_researcher
@@ -34,6 +35,7 @@ __all__ = [
     "create_news_analyst",
     "create_aggressive_debator",
     "create_portfolio_manager",
+    "create_position_sizer",
     "create_conservative_debator",
     "create_sentiment_analyst",
     "create_social_media_analyst",  # deprecated; will be removed in a future version

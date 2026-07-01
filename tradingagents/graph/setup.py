@@ -115,6 +115,7 @@ class GraphSetup:
         neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
         conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
         portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
+        position_sizer_node = create_position_sizer(self.quick_thinking_llm)
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -140,6 +141,7 @@ class GraphSetup:
         workflow.add_node("Neutral Analyst", neutral_analyst)
         workflow.add_node("Conservative Analyst", conservative_analyst)
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
+        workflow.add_node("Position Sizer", position_sizer_node)
 
         # Define edges
         # Fan out: every analyst starts in parallel from START, runs its own
@@ -208,6 +210,8 @@ class GraphSetup:
             },
         )
 
-        workflow.add_edge("Portfolio Manager", END)
+        # The Position Sizer turns the PM's rating into a placeable order, then ends.
+        workflow.add_edge("Portfolio Manager", "Position Sizer")
+        workflow.add_edge("Position Sizer", END)
 
         return workflow

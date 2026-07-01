@@ -445,6 +445,7 @@ class TradingAgentsGraph:
                 ],
             },
             "trader_investment_decision": final_state["trader_investment_plan"],
+            "position_sizing_plan": final_state.get("position_sizing_plan", ""),
             "risk_debate_state": {
                 "aggressive_history": final_state["risk_debate_state"]["aggressive_history"],
                 "conservative_history": final_state["risk_debate_state"]["conservative_history"],

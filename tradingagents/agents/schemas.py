@@ -206,6 +206,70 @@ class PortfolioDecision(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
+# Position Sizer
+# ---------------------------------------------------------------------------
+
+
+class PositionSizingPlan(BaseModel):
+    """Structured position-sizing plan produced by the Position Sizer.
+
+    Runs after the Portfolio Manager has issued the directional rating. Its job
+    is to turn that rating into a placeable order: how much of the portfolio to
+    commit, and the concrete entry / stop / target levels. Sizing is anchored on
+    the Technical Analyst's ATR (for stop distance) and scaled by the Macro
+    Analyst's volatility regime and the strength of the risk debate's conviction.
+    """
+
+    recommended_size_pct: float = Field(
+        description=(
+            "Recommended position size as a percentage of the portfolio (0-100). "
+            "Use 0.0 for Hold/Sell/avoid where no new exposure is warranted. Scale "
+            "down in high-volatility (high VIX) regimes and up with stronger "
+            "conviction, keeping account risk bounded (typically <=2% of equity at "
+            "the stop)."
+        ),
+    )
+    entry_price: Optional[float] = Field(
+        default=None,
+        description="Suggested entry price (or top of the entry zone) in the instrument's quote currency.",
+    )
+    stop_loss: Optional[float] = Field(
+        default=None,
+        description="Stop-loss price, preferably ATR-derived, in the instrument's quote currency.",
+    )
+    target_price: Optional[float] = Field(
+        default=None,
+        description="Take-profit / target price in the instrument's quote currency.",
+    )
+    risk_reward_ratio: Optional[float] = Field(
+        default=None,
+        description="Reward-to-risk ratio implied by the entry, stop, and target (e.g. 2.5 means 2.5:1).",
+    )
+    sizing_rationale: str = Field(
+        description=(
+            "Reasoning for the size and levels: the account-risk assumption, how "
+            "the ATR set the stop distance, and how the volatility regime and "
+            "conviction adjusted the size. Two to four sentences."
+        ),
+    )
+
+
+def render_position_sizing_plan(plan: PositionSizingPlan) -> str:
+    """Render a PositionSizingPlan to markdown for storage, CLI display, and reports."""
+    parts = [f"**Recommended Size**: {plan.recommended_size_pct}% of portfolio"]
+    if plan.entry_price is not None:
+        parts.extend(["", f"**Entry**: {plan.entry_price}"])
+    if plan.stop_loss is not None:
+        parts.extend(["", f"**Stop Loss**: {plan.stop_loss}"])
+    if plan.target_price is not None:
+        parts.extend(["", f"**Target**: {plan.target_price}"])
+    if plan.risk_reward_ratio is not None:
+        parts.extend(["", f"**Risk/Reward**: {plan.risk_reward_ratio}:1"])
+    parts.extend(["", f"**Rationale**: {plan.sizing_rationale}"])
+    return "\n".join(parts)
+
+
 def render_pm_decision(decision: PortfolioDecision) -> str:
     """Render a PortfolioDecision back to the markdown shape the rest of the system expects.
 

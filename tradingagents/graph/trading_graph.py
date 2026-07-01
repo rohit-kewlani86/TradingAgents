@@ -73,24 +73,28 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
+        # Initialize LLMs with provider-specific thinking configuration.
+        # Each tier resolves its own temperature (deterministic deep-tier
+        # judges, slightly diverse quick-tier analysts).
+        deep_kwargs = self._get_provider_kwargs("deep")
+        quick_kwargs = self._get_provider_kwargs("quick")
 
         # Add callbacks to kwargs if provided (passed to LLM constructor)
         if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
+            deep_kwargs["callbacks"] = self.callbacks
+            quick_kwargs["callbacks"] = self.callbacks
 
         deep_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["deep_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **deep_kwargs,
         )
         quick_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["quick_think_llm"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **quick_kwargs,
         )
 
         self.deep_thinking_llm = deep_client.get_llm()
@@ -129,8 +133,14 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
 
-    def _get_provider_kwargs(self) -> dict[str, Any]:
-        """Get provider-specific kwargs for LLM client creation."""
+    def _get_provider_kwargs(self, tier: str | None = None) -> dict[str, Any]:
+        """Get provider-specific kwargs for LLM client creation.
+
+        ``tier`` is ``"deep"`` or ``"quick"``; when given, the per-tier sampling
+        temperature (``deep_think_temperature`` / ``quick_think_temperature``)
+        takes precedence over the global ``temperature``. Calling without a tier
+        preserves the original single-temperature behaviour.
+        """
         kwargs = {}
         provider = self.config.get("llm_provider", "").lower()
 
@@ -150,9 +160,15 @@ class TradingAgentsGraph:
                 kwargs["effort"] = effort
 
         # Sampling temperature is cross-provider: forward it whenever set.
-        # float() here so a value coming from a TRADINGAGENTS_TEMPERATURE env
-        # string ("0.2") works the same as a programmatic float.
+        # A per-tier value (deep_think_temperature / quick_think_temperature)
+        # overrides the global temperature for that tier. float() here so a value
+        # coming from a TRADINGAGENTS_TEMPERATURE env string ("0.2") works the
+        # same as a programmatic float.
         temperature = self.config.get("temperature")
+        if tier in ("deep", "quick"):
+            tier_temp = self.config.get(f"{tier}_think_temperature")
+            if tier_temp is not None and tier_temp != "":
+                temperature = tier_temp
         if temperature is not None and temperature != "":
             kwargs["temperature"] = float(temperature)
 

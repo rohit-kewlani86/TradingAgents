@@ -187,13 +187,15 @@ class TradingAgentsGraph:
                     # LLM and required by its prompt; must be executable here or
                     # the call fails and the model reports it "unavailable").
                     get_verified_market_snapshot,
-                ]
+                ],
+                messages_key="market_messages",
             ),
             "social": ToolNode(
                 [
                     # News tools for social media analysis
                     get_news,
-                ]
+                ],
+                messages_key="social_messages",
             ),
             "news": ToolNode(
                 [
@@ -203,7 +205,8 @@ class TradingAgentsGraph:
                     get_insider_transactions,
                     get_macro_indicators,
                     get_prediction_markets,
-                ]
+                ],
+                messages_key="news_messages",
             ),
             "fundamentals": ToolNode(
                 [
@@ -212,13 +215,15 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
-                ]
+                ],
+                messages_key="fundamentals_messages",
             ),
             "technical": ToolNode(
                 [
                     get_stock_data,
                     get_indicators,
-                ]
+                ],
+                messages_key="technical_messages",
             ),
             "macro": ToolNode(
                 [
@@ -226,7 +231,8 @@ class TradingAgentsGraph:
                     get_stock_data,
                     get_indicators,
                     get_global_news,
-                ]
+                ],
+                messages_key="macro_messages",
             ),
         }
 

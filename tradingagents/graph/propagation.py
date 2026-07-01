@@ -33,6 +33,12 @@ class Propagator:
         """
         return {
             "messages": [("human", company_name)],
+            "market_messages": [("human", company_name)],
+            "social_messages": [("human", company_name)],
+            "news_messages": [("human", company_name)],
+            "fundamentals_messages": [("human", company_name)],
+            "technical_messages": [("human", company_name)],
+            "macro_messages": [("human", company_name)],
             "company_of_interest": company_name,
             "asset_type": asset_type,
             "instrument_context": instrument_context,

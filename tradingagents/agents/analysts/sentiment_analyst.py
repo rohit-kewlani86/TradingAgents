@@ -100,7 +100,7 @@ def create_sentiment_analyst(llm):
         # Format the template into a concrete message list so the structured
         # and free-text paths receive the same input. No bind_tools — the
         # data is already in the prompt.
-        formatted_messages = prompt.format_messages(messages=state["messages"])
+        formatted_messages = prompt.format_messages(messages=state["social_messages"])
 
         report_text = invoke_structured_or_freetext(
             structured_llm,
@@ -111,7 +111,7 @@ def create_sentiment_analyst(llm):
         )
 
         return {
-            "messages": [AIMessage(content=report_text)],
+            "social_messages": [AIMessage(content=report_text)],
             "sentiment_report": report_text,
         }
 

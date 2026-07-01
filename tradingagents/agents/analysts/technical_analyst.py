@@ -70,7 +70,7 @@ Call get_stock_data first to retrieve the CSV needed for indicators, then call g
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state["technical_messages"])
 
         report = ""
 
@@ -78,7 +78,7 @@ Call get_stock_data first to retrieve the CSV needed for indicators, then call g
             report = result.content
 
         return {
-            "messages": [result],
+            "technical_messages": [result],
             "technical_report": report,
         }
 

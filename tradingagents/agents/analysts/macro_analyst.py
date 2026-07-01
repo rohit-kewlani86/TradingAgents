@@ -78,7 +78,7 @@ Do not restate the company's fundamentals or price chart — that is other analy
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state["macro_messages"])
 
         report = ""
 
@@ -86,7 +86,7 @@ Do not restate the company's fundamentals or price chart — that is other analy
             report = result.content
 
         return {
-            "messages": [result],
+            "macro_messages": [result],
             "macro_report": report,
         }
 

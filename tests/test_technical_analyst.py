@@ -23,10 +23,10 @@ def test_technical_analyst_writes_report():
     node = create_technical_analyst(llm)
 
     state = {"trade_date": "2026-01-15", "company_of_interest": "AAPL",
-             "messages": [("human", "AAPL")]}
+             "technical_messages": [("human", "AAPL")]}
     out = node(state)
 
-    assert out["messages"] == [msg]
+    assert out["technical_messages"] == [msg]
     assert out["technical_report"] == "RSI 68, entry 448-452, ATR stop 435"
 
 

@@ -13,7 +13,6 @@ from tradingagents.agents import (
     create_devils_advocate,
     create_fundamentals_analyst,
     create_market_analyst,
-    create_msg_delete,
     create_neutral_debator,
     create_news_analyst,
     create_portfolio_manager,
@@ -28,6 +27,15 @@ from tradingagents.agents.utils.agent_states import AgentState
 
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
+
+
+def _analyst_done(state):
+    """No-op barrier node marking an analyst's tool loop as finished.
+
+    Reports are written to state by the analyst itself; this node only exists
+    as a fan-in synchronization point for the Bull Researcher.
+    """
+    return {}
 
 
 class GraphSetup:
@@ -86,10 +94,14 @@ class GraphSetup:
         # Create workflow
         workflow = StateGraph(AgentState)
 
-        # Add analyst nodes to the graph
+        # Add analyst nodes to the graph. Each analyst gets a private "Done"
+        # barrier node: the analyst runs its tool loop in parallel on its own
+        # message channel, then exits to its Done node. A single list-edge from
+        # all Done nodes to the Bull Researcher makes the debate wait for every
+        # analyst exactly once (a true fan-in barrier).
         for spec in plan.specs:
             workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
-            workflow.add_node(spec.clear_node, create_msg_delete())
+            workflow.add_node(spec.done_node, _analyst_done)
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
 
         # Add other nodes
@@ -105,28 +117,23 @@ class GraphSetup:
         workflow.add_node("Position Sizer", position_sizer_node)
 
         # Define edges
-        # Start with the first analyst
-        workflow.add_edge(START, plan.specs[0].agent_node)
-
-        # Connect analysts in sequence
-        for i, spec in enumerate(plan.specs):
-            current_analyst = spec.agent_node
-            current_tools = spec.tool_node
-            current_clear = spec.clear_node
-
-            # Add conditional edges for current analyst
+        # Fan out: every analyst starts in parallel from START, runs its own
+        # tool-call loop on a private message channel, then exits to its Done
+        # node. The Bull Researcher joins on all Done nodes (barrier) so the
+        # debate begins only after every analyst has finished.
+        done_nodes = []
+        for spec in plan.specs:
+            workflow.add_edge(START, spec.agent_node)
             workflow.add_conditional_edges(
-                current_analyst,
+                spec.agent_node,
                 getattr(self.conditional_logic, f"should_continue_{spec.key}"),
-                [current_tools, current_clear],
+                [spec.tool_node, spec.done_node],
             )
-            workflow.add_edge(current_tools, current_analyst)
+            workflow.add_edge(spec.tool_node, spec.agent_node)
+            done_nodes.append(spec.done_node)
 
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
-            if i < len(plan.specs) - 1:
-                workflow.add_edge(current_clear, plan.specs[i + 1].agent_node)
-            else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+        # Fan in: the Bull Researcher waits for every analyst's Done node.
+        workflow.add_edge(done_nodes, "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

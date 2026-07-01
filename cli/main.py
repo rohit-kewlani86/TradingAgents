@@ -44,7 +44,6 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
     AnalystWallTimeTracker,
     build_analyst_execution_plan,
-    get_initial_analyst_node,
     sync_analyst_tracker_from_chunk,
 )
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -917,11 +916,11 @@ def update_analyst_statuses(message_buffer, chunk, wall_time_tracker=None):
 
         if has_report:
             message_buffer.update_agent_status(agent_name, "completed")
-        elif not found_active:
+        else:
+            # Analysts run in parallel, so every analyst without a report yet is
+            # actively running — show them all as in_progress, not just the first.
             message_buffer.update_agent_status(agent_name, "in_progress")
             found_active = True
-        else:
-            message_buffer.update_agent_status(agent_name, "pending")
 
     # When all analysts complete, transition research team to in_progress
     if (
@@ -1133,10 +1132,11 @@ def run_analysis(checkpoint: bool | None = None):
         )
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Update agent status to in_progress for the first analyst
-        first_analyst = get_initial_analyst_node(analyst_execution_plan)
-        message_buffer.update_agent_status(first_analyst, "in_progress")
-        analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
+        # Analysts run in parallel, so mark every selected analyst in_progress
+        # at start (not just the first).
+        for _key in selected_analyst_keys:
+            message_buffer.update_agent_status(ANALYST_AGENT_NAMES[_key], "in_progress")
+            analyst_wall_time_tracker.mark_started(_key)
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Create spinner text

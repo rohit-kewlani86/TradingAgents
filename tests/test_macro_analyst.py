@@ -23,10 +23,10 @@ def test_macro_analyst_writes_report():
     node = create_macro_analyst(llm)
 
     state = {"trade_date": "2026-01-15", "company_of_interest": "AAPL",
-             "messages": [("human", "AAPL")]}
+             "macro_messages": [("human", "AAPL")]}
     out = node(state)
 
-    assert out["messages"] == [msg]
+    assert out["macro_messages"] == [msg]
     assert out["macro_report"] == "10y rising, VIX low, sector tailwind — net TAILWIND"
 
 
@@ -43,7 +43,7 @@ def test_macro_analyst_binds_fred_and_yfinance_tools():
     llm.bind_tools.side_effect = _bind
     node = create_macro_analyst(llm)
     node({"trade_date": "2026-01-15", "company_of_interest": "AAPL",
-          "messages": [("human", "AAPL")]})
+          "macro_messages": [("human", "AAPL")]})
 
     assert "get_macro_indicators" in captured["names"]
     assert "get_stock_data" in captured["names"]

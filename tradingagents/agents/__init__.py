@@ -1,5 +1,6 @@
 from .analysts.fundamentals_analyst import create_fundamentals_analyst
 from .analysts.market_analyst import create_market_analyst
+from .analysts.technical_analyst import create_technical_analyst
 from .analysts.news_analyst import create_news_analyst
 from .analysts.sentiment_analyst import (
     create_sentiment_analyst,
@@ -26,6 +27,7 @@ __all__ = [
     "create_research_manager",
     "create_fundamentals_analyst",
     "create_market_analyst",
+    "create_technical_analyst",
     "create_neutral_debator",
     "create_news_analyst",
     "create_aggressive_debator",

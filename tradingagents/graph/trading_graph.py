@@ -214,6 +214,12 @@ class TradingAgentsGraph:
                     get_income_statement,
                 ]
             ),
+            "technical": ToolNode(
+                [
+                    get_stock_data,
+                    get_indicators,
+                ]
+            ),
         }
 
     def _resolve_benchmark(self, ticker: str) -> str:

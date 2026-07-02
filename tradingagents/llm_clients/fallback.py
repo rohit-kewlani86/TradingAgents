@@ -18,6 +18,7 @@ from typing import Any
 from langchain_core.runnables import Runnable
 
 from .factory import create_llm_client
+from .live_models import get_live_model_ids
 from .model_catalog import get_catalog_model_ids
 
 logger = logging.getLogger(__name__)
@@ -66,21 +67,32 @@ class FallbackLLM(Runnable):
         Any exception from a model call triggers a fall-through to the next
         model. Only when every model fails is the last error re-raised.
         """
-        last_error: Exception | None = None
+        failures: list[tuple[str, Exception]] = []
         total = len(self._models)
         for index, model in enumerate(self._models, start=1):
             try:
                 return model.invoke(input, config=config, **kwargs)
             except Exception as exc:  # any failure → next model
-                last_error = exc
+                name = (
+                    getattr(model, "model_name", None)
+                    or getattr(model, "model", None)
+                    or getattr(model, "name", None)
+                    or f"model#{index}"
+                )
+                failures.append((str(name), exc))
                 logger.warning(
-                    "tier model %d/%d failed (%s); falling back to the next model",
+                    "tier model %d/%d (%s) failed (%s); falling back to the next model",
                     index,
                     total,
+                    name,
                     exc,
                 )
-        assert last_error is not None  # loop ran at least once (models non-empty)
-        raise last_error
+        # Every model failed. Surface all causes so the primary model's real
+        # error is never masked by whichever model happened to be tried last.
+        detail = "; ".join(f"{name}: {type(exc).__name__}: {exc}" for name, exc in failures)
+        raise RuntimeError(
+            f"all {total} model(s) in this tier failed — {detail}"
+        ) from failures[-1][1]
 
     def __getattr__(self, name: str) -> Any:
         # Delegate unknown attribute reads (e.g. model_name) to the primary
@@ -105,10 +117,17 @@ def build_tier_llm(
     is skipped. All models share the same ``client_kwargs`` (per-tier
     temperature, max_tokens, callbacks, etc.).
     """
+    # Restrict fallbacks to models the provider currently serves, so a retired
+    # catalog entry (e.g. an EOL model returning HTTP 410) can never enter the
+    # chain. When live discovery is unavailable, keep the full catalog.
+    live = set(get_live_model_ids(provider, base_url))
     ordered_ids = [model]
     for catalog_id in get_catalog_model_ids(provider, mode):
-        if catalog_id not in ordered_ids:
-            ordered_ids.append(catalog_id)
+        if catalog_id in ordered_ids:
+            continue
+        if live and catalog_id not in live:
+            continue
+        ordered_ids.append(catalog_id)
 
     models: list[Any] = []
     for model_id in ordered_ids:

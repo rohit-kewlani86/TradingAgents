@@ -64,6 +64,15 @@ class TestFallbackLLMInvoke:
         with pytest.raises(RuntimeError):
             FallbackLLM(models).invoke("hi")
 
+    def test_all_fail_error_names_every_model_and_cause(self):
+        models = [FakeModel("alpha", fail=True), FakeModel("beta", fail=True)]
+        with pytest.raises(RuntimeError) as exc_info:
+            FallbackLLM(models).invoke("hi")
+        msg = str(exc_info.value)
+        # both models and their causes are surfaced, not just the last one
+        assert "alpha" in msg and "beta" in msg
+        assert "alpha unavailable" in msg
+
 
 @pytest.mark.unit
 class TestFallbackLLMComposition:
@@ -122,6 +131,34 @@ class TestBuildTierLLM:
         assert created[0] == "m-b"
         assert set(created) == {"m-a", "m-b", "m-c"}
         assert len(created) == 3
+
+    def test_drops_catalog_models_not_in_live_set(self):
+        created = []
+
+        def fake_create(provider, model, base_url=None, **kwargs):
+            created.append(model)
+
+            class C:
+                def get_llm(self_inner):
+                    return FakeModel(model)
+
+            return C()
+
+        with patch("tradingagents.llm_clients.fallback.create_llm_client", fake_create), \
+             patch(
+                 "tradingagents.llm_clients.fallback.get_catalog_model_ids",
+                 return_value=["live-1", "dead-eol", "live-2"],
+             ), \
+             patch(
+                 "tradingagents.llm_clients.fallback.get_live_model_ids",
+                 return_value=["m-sel", "live-1", "live-2"],
+             ):
+            build_tier_llm("nvidia", "m-sel", "quick", "https://x/v1", {})
+
+        # the retired catalog model is excluded from the fallback chain
+        assert "dead-eol" not in created
+        assert created[0] == "m-sel"
+        assert set(created) == {"m-sel", "live-1", "live-2"}
 
 
 @pytest.mark.unit

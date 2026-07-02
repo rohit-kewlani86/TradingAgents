@@ -8,7 +8,7 @@ from rich.console import Console
 from cli.models import AnalystType, AssetType
 from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
 from tradingagents.llm_clients.api_key_env import get_api_key_env
-from tradingagents.llm_clients.model_catalog import get_model_options
+from tradingagents.llm_clients.model_catalog import get_selectable_model_options
 
 console = Console()
 
@@ -345,7 +345,9 @@ def _select_model(provider: str, mode: str) -> str:
         f"Select Your [{mode.title()}-Thinking LLM Engine]:",
         choices=[
             questionary.Choice(display, value=value)
-            for display, value in get_model_options(provider, mode)
+            for display, value in get_selectable_model_options(
+                provider, mode, provider_default_url(provider)
+            )
         ],
         instruction="\n- Use arrow keys to navigate\n- Press Enter to select",
         style=questionary.Style(

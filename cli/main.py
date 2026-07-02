@@ -1,5 +1,6 @@
 import datetime
 import os
+import sys
 import time
 from collections import deque
 from functools import wraps
@@ -20,6 +21,7 @@ from rich.text import Text
 
 from cli.announcements import display_announcements, fetch_announcements
 from cli.stats_handler import StatsCallbackHandler
+from cli.models import AssetType
 from cli.utils import (
     ask_anthropic_effort,
     ask_gemini_thinking_config,
@@ -28,10 +30,12 @@ from cli.utils import (
     ask_openai_reasoning_effort,
     ask_output_language,
     ask_qwen_region,
+    build_pre_ipo_config,
     confirm_ollama_endpoint,
     detect_asset_type,
     ensure_api_key,
     get_ticker,
+    is_listed_security,
     prompt_openai_compatible_url,
     resolve_backend_url,
     select_analysts,
@@ -44,7 +48,6 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
     AnalystWallTimeTracker,
     build_analyst_execution_plan,
-    get_initial_analyst_node,
     sync_analyst_tracker_from_chunk,
 )
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -65,8 +68,8 @@ class MessageBuffer:
     FIXED_AGENTS = {
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
-        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
-        "Portfolio Management": ["Portfolio Manager"],
+        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
+        "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
     # Analyst name mapping
@@ -75,6 +78,8 @@ class MessageBuffer:
         "social": "Sentiment Analyst",
         "news": "News Analyst",
         "fundamentals": "Fundamentals Analyst",
+        "technical": "Technical Analyst",
+        "macro": "Macro Analyst",
     }
 
     # Report section mapping: section -> (analyst_key for filtering, finalizing_agent)
@@ -85,9 +90,13 @@ class MessageBuffer:
         "sentiment_report": ("social", "Sentiment Analyst"),
         "news_report": ("news", "News Analyst"),
         "fundamentals_report": ("fundamentals", "Fundamentals Analyst"),
+        "technical_report": ("technical", "Technical Analyst"),
+        "macro_report": ("macro", "Macro Analyst"),
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
+        "devils_advocate_critique": (None, "Devil's Advocate"),
         "final_trade_decision": (None, "Portfolio Manager"),
+        "position_sizing_plan": (None, "Position Sizer"),
     }
 
     def __init__(self, max_length=100):
@@ -193,9 +202,13 @@ class MessageBuffer:
                 "sentiment_report": "Social Sentiment",
                 "news_report": "News Analysis",
                 "fundamentals_report": "Fundamentals Analysis",
+                "technical_report": "Technical Analysis",
+                "macro_report": "Macro Analysis",
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
+                "devils_advocate_critique": "Devil's Advocate",
                 "final_trade_decision": "Portfolio Management Decision",
+                "position_sizing_plan": "Position Sizing",
             }
             self.current_report = (
                 f"### {section_titles[latest_section]}\n{latest_content}"
@@ -208,7 +221,7 @@ class MessageBuffer:
         report_parts = []
 
         # Analyst Team Reports - use .get() to handle missing sections
-        analyst_sections = ["market_report", "sentiment_report", "news_report", "fundamentals_report"]
+        analyst_sections = ["market_report", "sentiment_report", "news_report", "fundamentals_report", "technical_report", "macro_report"]
         if any(self.report_sections.get(section) for section in analyst_sections):
             report_parts.append("## Analyst Team Reports")
             if self.report_sections.get("market_report"):
@@ -227,6 +240,14 @@ class MessageBuffer:
                 report_parts.append(
                     f"### Fundamentals Analysis\n{self.report_sections['fundamentals_report']}"
                 )
+            if self.report_sections.get("technical_report"):
+                report_parts.append(
+                    f"### Technical Analysis\n{self.report_sections['technical_report']}"
+                )
+            if self.report_sections.get("macro_report"):
+                report_parts.append(
+                    f"### Macro Analysis\n{self.report_sections['macro_report']}"
+                )
 
         # Research Team Reports
         if self.report_sections.get("investment_plan"):
@@ -238,10 +259,20 @@ class MessageBuffer:
             report_parts.append("## Trading Team Plan")
             report_parts.append(f"{self.report_sections['trader_investment_plan']}")
 
+        # Devil's Advocate (Red Team) critique
+        if self.report_sections.get("devils_advocate_critique"):
+            report_parts.append("## Devil's Advocate (Red Team)")
+            report_parts.append(f"{self.report_sections['devils_advocate_critique']}")
+
         # Portfolio Management Decision
         if self.report_sections.get("final_trade_decision"):
             report_parts.append("## Portfolio Management Decision")
             report_parts.append(f"{self.report_sections['final_trade_decision']}")
+
+        # Position Sizing
+        if self.report_sections.get("position_sizing_plan"):
+            report_parts.append("## Position Sizing")
+            report_parts.append(f"{self.report_sections['position_sizing_plan']}")
 
         self.final_report = "\n\n".join(report_parts) if report_parts else None
 
@@ -306,11 +337,13 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
             "Sentiment Analyst",
             "News Analyst",
             "Fundamentals Analyst",
+            "Technical Analyst",
+            "Macro Analyst",
         ],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
-        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
-        "Portfolio Management": ["Portfolio Manager"],
+        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
+        "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
     }
 
     # Filter teams to only include agents that are in agent_status
@@ -542,6 +575,50 @@ def get_user_selections():
     )
     selected_ticker = get_ticker()
     asset_type = detect_asset_type(selected_ticker)
+
+    # Pre-IPO detection: a pre-IPO company has no tradable ticker, so we can't
+    # infer it from the symbol string. Instead we let the code decide from a
+    # best-effort identity lookup — a symbol that resolves to a listed
+    # instrument is not pre-IPO, so no question is asked. We only fall back to a
+    # confirm when the symbol does NOT resolve (which is what a real pre-IPO
+    # name like "SPACEX" looks like, but could also be a typo/throttle — hence a
+    # confirm, not silent classification). TRADINGAGENTS_PRE_IPO overrides for
+    # non-interactive runs; a plain non-TTY run defaults to not-pre-IPO.
+    pre_ipo_company = None
+    if asset_type == AssetType.STOCK:
+        env_pre_ipo = os.environ.get("TRADINGAGENTS_PRE_IPO")
+        if env_pre_ipo is not None:
+            is_pre_ipo = env_pre_ipo.strip().lower() in ("1", "true", "yes")
+        elif is_listed_security(selected_ticker):
+            is_pre_ipo = False  # resolves to a listed instrument — not pre-IPO
+        elif sys.stdin.isatty():
+            console.print(
+                f"[yellow]'{selected_ticker}' didn't resolve to a listed "
+                f"security.[/yellow]"
+            )
+            is_pre_ipo = typer.confirm(
+                "Analyze it as a pre-IPO / not-yet-listed company?", default=False
+            )
+        else:
+            is_pre_ipo = False
+
+        if is_pre_ipo:
+            company_name = os.environ.get(
+                "TRADINGAGENTS_PRE_IPO_COMPANY"
+            ) or (
+                typer.prompt("Company name", default=selected_ticker)
+                if sys.stdin.isatty()
+                else selected_ticker
+            )
+            listed_ticker = os.environ.get("TRADINGAGENTS_PRE_IPO_LISTED_TICKER") or (
+                typer.prompt("Expected listing ticker (leave blank if unknown)", default="")
+                if sys.stdin.isatty()
+                else ""
+            )
+            pre_ipo_cfg = build_pre_ipo_config(True, company_name, listed_ticker)
+            asset_type = AssetType.PRE_IPO
+            pre_ipo_company = pre_ipo_cfg["pre_ipo_company"]
+
     # Only announce when it's not the default stock path, to avoid printing
     # "stock" on every run.
     if asset_type.value != "stock":
@@ -714,6 +791,7 @@ def get_user_selections():
     return {
         "ticker": selected_ticker,
         "asset_type": asset_type.value,
+        "pre_ipo_company": pre_ipo_company,
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
@@ -767,6 +845,10 @@ def display_complete_report(final_state):
         analysts.append(("News Analyst", final_state["news_report"]))
     if final_state.get("fundamentals_report"):
         analysts.append(("Fundamentals Analyst", final_state["fundamentals_report"]))
+    if final_state.get("technical_report"):
+        analysts.append(("Technical Analyst", final_state["technical_report"]))
+    if final_state.get("macro_report"):
+        analysts.append(("Macro Analyst", final_state["macro_report"]))
     if analysts:
         console.print(Panel("[bold]I. Analyst Team Reports[/bold]", border_style="cyan"))
         for title, content in analysts:
@@ -807,10 +889,20 @@ def display_complete_report(final_state):
             for title, content in risk_reports:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
+        # Devil's Advocate (Red Team)
+        if final_state.get("devils_advocate_critique"):
+            console.print(Panel("[bold]Devil's Advocate (Red Team)[/bold]", border_style="red"))
+            console.print(Panel(Markdown(final_state["devils_advocate_critique"]), title="Devil's Advocate", border_style="blue", padding=(1, 2)))
+
         # V. Portfolio Manager Decision
         if risk.get("judge_decision"):
             console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
             console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
+
+        # VI. Position Sizing
+        if final_state.get("position_sizing_plan"):
+            console.print(Panel("[bold]VI. Position Sizing[/bold]", border_style="green"))
+            console.print(Panel(Markdown(final_state["position_sizing_plan"]), title="Position Sizer", border_style="blue", padding=(1, 2)))
 
 
 def update_research_team_status(status):
@@ -821,18 +913,22 @@ def update_research_team_status(status):
 
 
 # Ordered list of analysts for status transitions
-ANALYST_ORDER = ["market", "social", "news", "fundamentals"]
+ANALYST_ORDER = ["market", "social", "news", "fundamentals", "technical", "macro"]
 ANALYST_AGENT_NAMES = {
     "market": "Market Analyst",
     "social": "Sentiment Analyst",
     "news": "News Analyst",
     "fundamentals": "Fundamentals Analyst",
+    "technical": "Technical Analyst",
+    "macro": "Macro Analyst",
 }
 ANALYST_REPORT_MAP = {
     "market": "market_report",
     "social": "sentiment_report",
     "news": "news_report",
     "fundamentals": "fundamentals_report",
+    "technical": "technical_report",
+    "macro": "macro_report",
 }
 
 
@@ -869,11 +965,11 @@ def update_analyst_statuses(message_buffer, chunk, wall_time_tracker=None):
 
         if has_report:
             message_buffer.update_agent_status(agent_name, "completed")
-        elif not found_active:
+        else:
+            # Analysts run in parallel, so every analyst without a report yet is
+            # actively running — show them all as in_progress, not just the first.
             message_buffer.update_agent_status(agent_name, "in_progress")
             found_active = True
-        else:
-            message_buffer.update_agent_status(agent_name, "pending")
 
     # When all analysts complete, transition research team to in_progress
     if (
@@ -981,6 +1077,10 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
     config["anthropic_effort"] = selections.get("anthropic_effort")
     config["output_language"] = selections.get("output_language", "English")
+    # Pre-IPO mode: asset_type drives vendor routing + the analyst swap, and
+    # pre_ipo_company carries the name/listing symbol for reflection.
+    config["asset_type"] = selections.get("asset_type", "stock")
+    config["pre_ipo_company"] = selections.get("pre_ipo_company")
     # --checkpoint/--no-checkpoint overrides only when explicitly given; omitting
     # the flag preserves TRADINGAGENTS_CHECKPOINT_ENABLED / the default (#976).
     if checkpoint is not None:
@@ -1085,10 +1185,11 @@ def run_analysis(checkpoint: bool | None = None):
         )
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Update agent status to in_progress for the first analyst
-        first_analyst = get_initial_analyst_node(analyst_execution_plan)
-        message_buffer.update_agent_status(first_analyst, "in_progress")
-        analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
+        # Analysts run in parallel, so mark every selected analyst in_progress
+        # at start (not just the first).
+        for _key in selected_analyst_keys:
+            message_buffer.update_agent_status(ANALYST_AGENT_NAMES[_key], "in_progress")
+            analyst_wall_time_tracker.mark_started(_key)
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Create spinner text
@@ -1212,6 +1313,26 @@ def run_analysis(checkpoint: bool | None = None):
                     message_buffer.update_agent_status("Conservative Analyst", "completed")
                     message_buffer.update_agent_status("Neutral Analyst", "completed")
                     message_buffer.update_agent_status("Portfolio Manager", "completed")
+                    message_buffer.update_agent_status("Position Sizer", "in_progress")
+
+            # Devil's Advocate - red-teams the decision after the risk debate,
+            # before the Portfolio Manager finalises.
+            if chunk.get("devils_advocate_critique"):
+                message_buffer.update_report_section(
+                    "devils_advocate_critique", chunk["devils_advocate_critique"]
+                )
+                for _risk_agent in ("Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"):
+                    message_buffer.update_agent_status(_risk_agent, "completed")
+                if message_buffer.agent_status.get("Devil's Advocate") != "completed":
+                    message_buffer.update_agent_status("Devil's Advocate", "completed")
+                    message_buffer.update_agent_status("Portfolio Manager", "in_progress")
+
+            # Position Sizing - runs after the Portfolio Manager
+            if chunk.get("position_sizing_plan"):
+                message_buffer.update_report_section(
+                    "position_sizing_plan", chunk["position_sizing_plan"]
+                )
+                message_buffer.update_agent_status("Position Sizer", "completed")
 
             # Update the display
             update_display(layout, stats_handler=stats_handler, start_time=start_time)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .live_models import get_live_model_ids
+
 ModelOption = tuple[str, str]
 ProviderModeOptions = dict[str, dict[str, list[ModelOption]]]
 
@@ -73,6 +75,25 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
         ("MiniMax-M2.7 - Previous flagship, 204K ctx", "MiniMax-M2.7"),
         ("MiniMax-M2.7-highspeed - Same quality as M2.7, ~100 TPS", "MiniMax-M2.7-highspeed"),
         ("MiniMax-M2.5 - Earlier flagship, 204K ctx", "MiniMax-M2.5"),
+        ("Custom model ID", "custom"),
+    ],
+}
+
+
+# NVIDIA NIM (integrate.api.nvidia.com/v1). IDs are namespaced (vendor/model)
+# exactly as the NIM API expects. Custom model ID stays available for any model
+# on the account not listed here.
+_NVIDIA_MODELS: dict[str, list[ModelOption]] = {
+    "quick": [
+        ("Llama 3.3 70B Instruct - Fast general-purpose flagship", "meta/llama-3.3-70b-instruct"),
+        ("Llama 3.1 8B Instruct - Lightweight, low latency", "meta/llama-3.1-8b-instruct"),
+        ("Qwen2.5 Coder 32B Instruct - Coding/tool-use focused", "qwen/qwen2.5-coder-32b-instruct"),
+        ("Custom model ID", "custom"),
+    ],
+    "deep": [
+        ("DeepSeek-R1 - Reasoning flagship", "deepseek-ai/deepseek-r1"),
+        ("Llama 3.1 405B Instruct - Largest general model", "meta/llama-3.1-405b-instruct"),
+        ("Llama 3.1 Nemotron 70B - NVIDIA-tuned reasoning", "nvidia/llama-3.1-nemotron-70b-instruct"),
         ("Custom model ID", "custom"),
     ],
 }
@@ -185,7 +206,7 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "mistral": _CUSTOM_ONLY,
     "kimi": _CUSTOM_ONLY,
     "groq": _CUSTOM_ONLY,
-    "nvidia": _CUSTOM_ONLY,
+    "nvidia": _NVIDIA_MODELS,
     # Bedrock model IDs / cross-region inference profile IDs are user-specified.
     "bedrock": _CUSTOM_ONLY,
 }
@@ -194,6 +215,38 @@ MODEL_OPTIONS: ProviderModeOptions = {
 def get_model_options(provider: str, mode: str) -> list[ModelOption]:
     """Return shared model options for a provider and selection mode."""
     return MODEL_OPTIONS[provider.lower()][mode]
+
+
+def get_selectable_model_options(
+    provider: str, mode: str, base_url: str | None = None
+) -> list[ModelOption]:
+    """Model options for the CLI picker, preferring live models.
+
+    Queries the provider's live model list; when available, shows the curated
+    catalog entries that are still live (dropping retired ones), or the raw live
+    list if none of the curated entries survive — always with a Custom-ID
+    fallback. When live discovery is unavailable (no key, non-OpenAI provider,
+    offline) it degrades to the hardcoded catalog.
+    """
+    live = get_live_model_ids(provider, base_url)
+    if not live:
+        return get_model_options(provider, mode)
+
+    live_set = set(live)
+    curated_live = [mid for mid in get_catalog_model_ids(provider, mode) if mid in live_set]
+    ids = curated_live or live
+    return [(mid, mid) for mid in ids] + [("Custom model ID", "custom")]
+
+
+def get_catalog_model_ids(provider: str, mode: str) -> list[str]:
+    """Concrete model IDs for a provider+tier, in catalog order, minus the
+    ``custom`` sentinel. Empty when the provider has no catalog entry. Used to
+    build the per-tier fallback chain.
+    """
+    mode_options = MODEL_OPTIONS.get(provider.lower())
+    if not mode_options:
+        return []
+    return [value for _, value in mode_options.get(mode, []) if value != "custom"]
 
 
 def get_known_models() -> dict[str, list[str]]:

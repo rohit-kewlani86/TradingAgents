@@ -27,11 +27,12 @@ from tradingagents.agents.utils.agent_utils import (
     get_verified_market_snapshot,
     resolve_instrument_identity,
 )
+from tradingagents.agents.utils.valuation_tools import get_valuation
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.llm_clients import create_llm_client
+from tradingagents.llm_clients.fallback import build_tier_llm
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -53,6 +54,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        asset_type: str | None = None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -66,6 +68,14 @@ class TradingAgentsGraph:
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
 
+        # Resolve the analysis mode. An explicit constructor arg wins; otherwise
+        # honour ``config["asset_type"]`` so callers can select pre-IPO mode
+        # purely through config. The value is written back into the config so
+        # the vendor router (``get_vendor``) sees it and routes fundamentals/
+        # news/valuation to the pre-IPO adapters.
+        self.asset_type = asset_type or self.config.get("asset_type", "stock")
+        self.config["asset_type"] = self.asset_type
+
         # Update the interface's config
         set_config(self.config)
 
@@ -73,28 +83,29 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
+        # Initialize LLMs with provider-specific thinking configuration.
+        # Each tier resolves its own temperature (deterministic deep-tier
+        # judges, slightly diverse quick-tier analysts).
+        deep_kwargs = self._get_provider_kwargs("deep")
+        quick_kwargs = self._get_provider_kwargs("quick")
 
         # Add callbacks to kwargs if provided (passed to LLM constructor)
         if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
+            deep_kwargs["callbacks"] = self.callbacks
+            quick_kwargs["callbacks"] = self.callbacks
 
-        deep_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["deep_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+        # Each tier is a FallbackLLM over its catalog: the selected model is
+        # tried first, then the other catalog models for that tier, so a failed
+        # model call falls through to the next available model and the run only
+        # breaks when every model in the tier is failing.
+        provider = self.config["llm_provider"]
+        base_url = self.config.get("backend_url")
+        self.deep_thinking_llm = build_tier_llm(
+            provider, self.config["deep_think_llm"], "deep", base_url, deep_kwargs
         )
-        quick_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["quick_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+        self.quick_thinking_llm = build_tier_llm(
+            provider, self.config["quick_think_llm"], "quick", base_url, quick_kwargs
         )
-
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
 
         self.memory_log = TradingMemoryLog(self.config)
 
@@ -111,6 +122,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            asset_type=self.asset_type,
         )
 
         self.propagator = Propagator(
@@ -129,8 +141,14 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
 
-    def _get_provider_kwargs(self) -> dict[str, Any]:
-        """Get provider-specific kwargs for LLM client creation."""
+    def _get_provider_kwargs(self, tier: str | None = None) -> dict[str, Any]:
+        """Get provider-specific kwargs for LLM client creation.
+
+        ``tier`` is ``"deep"`` or ``"quick"``; when given, the per-tier sampling
+        temperature (``deep_think_temperature`` / ``quick_think_temperature``)
+        takes precedence over the global ``temperature``. Calling without a tier
+        preserves the original single-temperature behaviour.
+        """
         kwargs = {}
         provider = self.config.get("llm_provider", "").lower()
 
@@ -150,34 +168,60 @@ class TradingAgentsGraph:
                 kwargs["effort"] = effort
 
         # Sampling temperature is cross-provider: forward it whenever set.
-        # float() here so a value coming from a TRADINGAGENTS_TEMPERATURE env
-        # string ("0.2") works the same as a programmatic float.
+        # A per-tier value (deep_think_temperature / quick_think_temperature)
+        # overrides the global temperature for that tier. float() here so a value
+        # coming from a TRADINGAGENTS_TEMPERATURE env string ("0.2") works the
+        # same as a programmatic float.
         temperature = self.config.get("temperature")
+        if tier in ("deep", "quick"):
+            tier_temp = self.config.get(f"{tier}_think_temperature")
+            if tier_temp is not None and tier_temp != "":
+                temperature = tier_temp
         if temperature is not None and temperature != "":
             kwargs["temperature"] = float(temperature)
+
+        # Per-tier output cap: bounds a runaway generation without touching the
+        # deep judges. Maps to the provider-native kwarg (Google uses
+        # max_output_tokens). Only applied when a tier is given and set.
+        if tier in ("deep", "quick"):
+            max_tokens = self.config.get(f"{tier}_think_max_tokens")
+            if max_tokens:
+                key = "max_output_tokens" if provider == "google" else "max_tokens"
+                kwargs[key] = int(max_tokens)
 
         return kwargs
 
     def _create_tool_nodes(self) -> dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
+        # In pre-IPO mode the market slot is the Valuation Analyst, whose tools
+        # are private-market (valuation/fundamentals/news) rather than price and
+        # technicals. The node key stays "market" so topology wiring is unchanged.
+        # ``getattr`` keeps this callable unbound (self=None) as some tests do.
+        if getattr(self, "asset_type", "stock") == "pre_ipo":
+            market_tools = [get_valuation, get_fundamentals, get_news]
+        else:
+            market_tools = [
+                # Core stock data tools
+                get_stock_data,
+                # Technical indicators
+                get_indicators,
+                # Deterministic verification snapshot (bound to the analyst
+                # LLM and required by its prompt; must be executable here or
+                # the call fails and the model reports it "unavailable").
+                get_verified_market_snapshot,
+            ]
+
         return {
             "market": ToolNode(
-                [
-                    # Core stock data tools
-                    get_stock_data,
-                    # Technical indicators
-                    get_indicators,
-                    # Deterministic verification snapshot (bound to the analyst
-                    # LLM and required by its prompt; must be executable here or
-                    # the call fails and the model reports it "unavailable").
-                    get_verified_market_snapshot,
-                ]
+                market_tools,
+                messages_key="market_messages",
             ),
             "social": ToolNode(
                 [
                     # News tools for social media analysis
                     get_news,
-                ]
+                ],
+                messages_key="social_messages",
             ),
             "news": ToolNode(
                 [
@@ -187,7 +231,8 @@ class TradingAgentsGraph:
                     get_insider_transactions,
                     get_macro_indicators,
                     get_prediction_markets,
-                ]
+                ],
+                messages_key="news_messages",
             ),
             "fundamentals": ToolNode(
                 [
@@ -196,7 +241,24 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
-                ]
+                ],
+                messages_key="fundamentals_messages",
+            ),
+            "technical": ToolNode(
+                [
+                    get_stock_data,
+                    get_indicators,
+                ],
+                messages_key="technical_messages",
+            ),
+            "macro": ToolNode(
+                [
+                    get_macro_indicators,
+                    get_stock_data,
+                    get_indicators,
+                    get_global_news,
+                ],
+                messages_key="macro_messages",
             ),
         }
 
@@ -266,6 +328,20 @@ class TradingAgentsGraph:
             )
             return None, None, None
 
+    def _resolution_symbol(self, ticker: str) -> str | None:
+        """The tradable symbol a decision's realized return is measured against.
+
+        For listed instruments this is the ticker itself. For a pre-IPO company
+        there is no tradable market yet, so returns cannot be computed until it
+        lists — we resolve against ``pre_ipo_company["listed_ticker"]`` once
+        known, and return ``None`` while it is still private (the caller then
+        leaves the decision pending).
+        """
+        if self.asset_type == "pre_ipo":
+            pre_ipo = self.config.get("pre_ipo_company") or {}
+            return pre_ipo.get("listed_ticker")
+        return ticker
+
     def _resolve_pending_entries(self, ticker: str) -> None:
         """Resolve pending log entries for ticker at the start of a new run.
 
@@ -276,15 +352,21 @@ class TradingAgentsGraph:
         Trade-off: only same-ticker entries are resolved per run.  Entries for
         other tickers accumulate until that ticker is run again.
         """
+        # A pre-IPO company that has not listed has no price series to score
+        # against, so its decisions stay pending until it IPOs.
+        symbol = self._resolution_symbol(ticker)
+        if symbol is None:
+            return
+
         pending = [e for e in self.memory_log.get_pending_entries() if e["ticker"] == ticker]
         if not pending:
             return
 
-        benchmark = self._resolve_benchmark(ticker)
+        benchmark = self._resolve_benchmark(symbol)
         updates = []
         for entry in pending:
             raw, alpha, days = self._fetch_returns(
-                ticker, entry["date"], benchmark=benchmark,
+                symbol, entry["date"], benchmark=benchmark,
             )
             if raw is None:
                 continue  # price not available yet — try again next run
@@ -465,8 +547,10 @@ class TradingAgentsGraph:
                 "history": final_state["risk_debate_state"]["history"],
                 "judge_decision": final_state["risk_debate_state"]["judge_decision"],
             },
+            "devils_advocate_critique": final_state.get("devils_advocate_critique", ""),
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
+            "position_sizing_plan": final_state.get("position_sizing_plan", ""),
         }
 
         # Save to file. Reject ticker values that would escape the

@@ -19,7 +19,7 @@ class AnalystExecutionPlanTests(unittest.TestCase):
 
     def test_rejects_unknown_analyst_keys(self):
         with self.assertRaises(ValueError):
-            build_analyst_execution_plan(["market", "macro"])
+            build_analyst_execution_plan(["market", "bogus"])
 
     def test_get_initial_analyst_node_uses_plan_metadata(self):
         plan = build_analyst_execution_plan(["fundamentals", "news"])
@@ -65,7 +65,9 @@ class AnalystWallTimeTrackerTests(unittest.TestCase):
             "Analyst wall time: News 4.00s | Market 2.25s",
         )
 
-    def test_syncs_wall_time_from_sequential_chunks(self):
+    def test_syncs_wall_time_from_parallel_chunks(self):
+        # Analysts run in parallel: both start at the first sync, and each
+        # completes when its own report appears.
         plan = build_analyst_execution_plan(["market", "news"])
         tracker = AnalystWallTimeTracker(plan)
 
@@ -84,7 +86,8 @@ class AnalystWallTimeTrackerTests(unittest.TestCase):
             {"market_report": "done", "news_report": "done"},
             now=18.0,
         )
+        # news started at 10.0 (parallel), so its wall time is 18 - 10 = 8.0.
         self.assertEqual(
             tracker.get_wall_times(),
-            {"market": 3.0, "news": 5.0},
+            {"market": 3.0, "news": 8.0},
         )

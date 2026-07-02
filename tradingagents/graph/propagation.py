@@ -33,6 +33,12 @@ class Propagator:
         """
         return {
             "messages": [("human", company_name)],
+            "market_messages": [("human", company_name)],
+            "social_messages": [("human", company_name)],
+            "news_messages": [("human", company_name)],
+            "fundamentals_messages": [("human", company_name)],
+            "technical_messages": [("human", company_name)],
+            "macro_messages": [("human", company_name)],
             "company_of_interest": company_name,
             "asset_type": asset_type,
             "instrument_context": instrument_context,
@@ -66,6 +72,10 @@ class Propagator:
             "fundamentals_report": "",
             "sentiment_report": "",
             "news_report": "",
+            "technical_report": "",
+            "macro_report": "",
+            "devils_advocate_critique": "",
+            "position_sizing_plan": "",
         }
 
     def get_graph_args(self, callbacks: list | None = None) -> dict[str, Any]:

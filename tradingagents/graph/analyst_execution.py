@@ -8,6 +8,7 @@ class AnalystNodeSpec:
     key: str
     agent_node: str
     clear_node: str
+    done_node: str
     tool_node: str
     report_key: str
 
@@ -21,6 +22,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
     "market": AnalystNodeSpec(
         key="market",
         agent_node="Market Analyst",
+        done_node="Market Done",
         clear_node="Msg Clear Market",
         tool_node="tools_market",
         report_key="market_report",
@@ -32,6 +34,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         # StockTwits + Reddit, not just social media).
         key="social",
         agent_node="Sentiment Analyst",
+        done_node="Sentiment Done",
         clear_node="Msg Clear Sentiment",
         tool_node="tools_social",
         report_key="sentiment_report",
@@ -39,6 +42,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
     "news": AnalystNodeSpec(
         key="news",
         agent_node="News Analyst",
+        done_node="News Done",
         clear_node="Msg Clear News",
         tool_node="tools_news",
         report_key="news_report",
@@ -46,9 +50,26 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
     "fundamentals": AnalystNodeSpec(
         key="fundamentals",
         agent_node="Fundamentals Analyst",
+        done_node="Fundamentals Done",
         clear_node="Msg Clear Fundamentals",
         tool_node="tools_fundamentals",
         report_key="fundamentals_report",
+    ),
+    "technical": AnalystNodeSpec(
+        key="technical",
+        agent_node="Technical Analyst",
+        done_node="Technical Done",
+        clear_node="Msg Clear Technical",
+        tool_node="tools_technical",
+        report_key="technical_report",
+    ),
+    "macro": AnalystNodeSpec(
+        key="macro",
+        agent_node="Macro Analyst",
+        done_node="Macro Done",
+        clear_node="Msg Clear Macro",
+        tool_node="tools_macro",
+        report_key="macro_report",
     ),
 }
 
@@ -120,16 +141,11 @@ def sync_analyst_tracker_from_chunk(
     now: float | None = None,
 ) -> None:
     current_time = monotonic() if now is None else now
-    active_found = False
 
+    # Analysts run in parallel: every analyst is running from the start, and
+    # each completes when its report appears.
     for spec in tracker.plan.specs:
         has_report = bool(chunk.get(spec.report_key))
-
+        tracker.mark_started(spec.key, started_at=current_time)
         if has_report:
-            tracker.mark_started(spec.key, started_at=current_time)
             tracker.mark_completed(spec.key, completed_at=current_time)
-            continue
-
-        if not active_found:
-            tracker.mark_started(spec.key, started_at=current_time)
-            active_found = True

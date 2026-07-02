@@ -95,15 +95,35 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # variation on models that honor it; reasoning models largely ignore it
     # and no setting makes LLM output bit-identical across runs (see README).
     "temperature": None,
+    # Per-tier sampling temperature. Overrides the global ``temperature`` above
+    # for each LLM tier so the deep-tier judges (Research Manager, Portfolio
+    # Manager) run deterministically at 0.0 while the quick-tier analysts keep
+    # a little diversity at 0.3 — cutting run-to-run variance in the final
+    # decision without making every analyst identical. Set to None to fall back
+    # to the global ``temperature`` for that tier.
+    "deep_think_temperature": 0.0,
+    "quick_think_temperature": 0.3,
+    # Per-tier cap on generated tokens. None leaves the provider default in
+    # place; a value bounds a runaway generation (an analyst spiralling into a
+    # very large response that dominates wall-clock) without touching the deep
+    # judges. Maps to max_output_tokens on Google, max_tokens elsewhere.
+    "deep_think_max_tokens": None,
+    "quick_think_max_tokens": None,
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,
+    # Pre-IPO analysis. The mode itself is signalled by ``asset_type == "pre_ipo"``;
+    # this holds the extra identity a ticker cannot carry: the company name and,
+    # optionally, the symbol it will list under. ``listed_ticker`` lets the
+    # reflection layer resolve a pending pre-IPO decision once the company IPOs.
+    # ``{"name": "SpaceX", "listed_ticker": "SPCX" | None}`` or None when listed.
+    "pre_ipo_company": None,
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
     # Debate and discussion settings
-    "max_debate_rounds": 1,
-    "max_risk_discuss_rounds": 1,
+    "max_debate_rounds": 2,
+    "max_risk_discuss_rounds": 2,
     "max_recur_limit": 100,
     # News / data fetching parameters
     # Increase for longer lookback strategies or to broaden macro coverage;

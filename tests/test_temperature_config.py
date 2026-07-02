@@ -78,3 +78,50 @@ class TestProviderKwargsTemperature:
 
     def test_empty_string_omitted(self):
         assert "temperature" not in self._kwargs_for("")
+
+
+@pytest.mark.unit
+class TestPerTierTemperature:
+    """Per-tier temperature: deterministic deep-tier judges (0.0) and
+    lower-variance quick-tier analysts (0.3), each falling back to the global
+    ``temperature`` when its per-tier key is unset."""
+
+    def _kwargs_for(self, tier, config):
+        from tradingagents.graph.trading_graph import TradingAgentsGraph
+        graph = TradingAgentsGraph.__new__(TradingAgentsGraph)
+        graph.config = {"llm_provider": "openai", **config}
+        return TradingAgentsGraph._get_provider_kwargs(graph, tier)
+
+    def test_default_config_has_per_tier_temperatures(self):
+        from tradingagents.default_config import DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["deep_think_temperature"] == 0.0
+        assert DEFAULT_CONFIG["quick_think_temperature"] == 0.3
+
+    def test_deep_tier_uses_deep_temperature(self):
+        cfg = {"deep_think_temperature": 0.0, "quick_think_temperature": 0.3}
+        assert self._kwargs_for("deep", cfg)["temperature"] == 0.0
+
+    def test_quick_tier_uses_quick_temperature(self):
+        cfg = {"deep_think_temperature": 0.0, "quick_think_temperature": 0.3}
+        assert self._kwargs_for("quick", cfg)["temperature"] == 0.3
+
+    def test_per_tier_falls_back_to_global_temperature(self):
+        cfg = {"temperature": 0.5}  # no per-tier keys
+        assert self._kwargs_for("deep", cfg)["temperature"] == 0.5
+        assert self._kwargs_for("quick", cfg)["temperature"] == 0.5
+
+    def test_no_tier_arg_preserves_global_behaviour(self):
+        # Back-compat: calling without a tier still forwards the global value.
+        cfg = {"temperature": 0.2}
+        assert self._kwargs_for(None, cfg)["temperature"] == 0.2
+
+
+@pytest.mark.unit
+class TestDebateRoundDefaults:
+    def test_default_debate_rounds_is_two(self):
+        from tradingagents.default_config import DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["max_debate_rounds"] == 2
+
+    def test_default_risk_rounds_is_two(self):
+        from tradingagents.default_config import DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["max_risk_discuss_rounds"] == 2

@@ -6,8 +6,9 @@ from dotenv import find_dotenv, set_key
 from rich.console import Console
 
 from cli.models import AnalystType, AssetType
+from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
 from tradingagents.llm_clients.api_key_env import get_api_key_env
-from tradingagents.llm_clients.model_catalog import get_model_options
+from tradingagents.llm_clients.model_catalog import get_selectable_model_options
 
 console = Console()
 
@@ -18,6 +19,8 @@ ANALYST_ORDER = [
     ("Sentiment Analyst", AnalystType.SOCIAL),
     ("News Analyst", AnalystType.NEWS),
     ("Fundamentals Analyst", AnalystType.FUNDAMENTALS),
+    ("Technical Analyst", AnalystType.TECHNICAL),
+    ("Macro Analyst", AnalystType.MACRO),
 ]
 
 CRYPTO_SUFFIXES = ("-USD", "-USDT", "-USDC", "-BTC", "-ETH")
@@ -90,13 +93,51 @@ def detect_asset_type(ticker: str) -> AssetType:
 def filter_analysts_for_asset_type(
     analysts: list[AnalystType], asset_type: AssetType
 ) -> list[AnalystType]:
-    if asset_type != AssetType.CRYPTO:
-        return analysts
-    return [
-        analyst
-        for analyst in analysts
-        if analyst != AnalystType.FUNDAMENTALS
-    ]
+    if asset_type == AssetType.CRYPTO:
+        return [a for a in analysts if a != AnalystType.FUNDAMENTALS]
+    if asset_type == AssetType.PRE_IPO:
+        # A pre-IPO company has no price history, so technical analysis is
+        # impossible; the market slot is handled by the Valuation Analyst.
+        return [a for a in analysts if a != AnalystType.TECHNICAL]
+    return analysts
+
+
+def is_listed_security(ticker: str) -> bool:
+    """Best-effort check that a symbol resolves to a recognized listed instrument.
+
+    Used to decide whether to offer pre-IPO analysis: a symbol that resolves to
+    a real company/exchange is listed (skip the prompt); one that returns no
+    identity may be pre-IPO. A failed lookup (rate-limit, network, unknown
+    symbol) returns False, which surfaces the confirm rather than silently
+    misclassifying — the safe direction, since a typo or throttle must never
+    auto-route a listed ticker into the pre-IPO pipeline.
+    """
+    try:
+        return bool(resolve_instrument_identity(ticker))
+    except Exception:
+        return False
+
+
+def build_pre_ipo_config(
+    is_pre_ipo: bool, company_name: str, listed_ticker: str
+) -> dict:
+    """Map the CLI's pre-IPO selection into graph config.
+
+    Pre-IPO mode is signalled by ``asset_type == "pre_ipo"`` (reusing the
+    asset-type dimension), and ``pre_ipo_company`` carries the name plus the
+    optional symbol the company will list under so the reflection layer can
+    resolve the decision once it IPOs. ``listed_ticker`` is normalised to
+    ``None`` when blank.
+    """
+    if not is_pre_ipo:
+        return {"asset_type": "stock", "pre_ipo_company": None}
+    return {
+        "asset_type": "pre_ipo",
+        "pre_ipo_company": {
+            "name": company_name,
+            "listed_ticker": listed_ticker or None,
+        },
+    }
 
 
 def get_analysis_date() -> str:
@@ -304,7 +345,9 @@ def _select_model(provider: str, mode: str) -> str:
         f"Select Your [{mode.title()}-Thinking LLM Engine]:",
         choices=[
             questionary.Choice(display, value=value)
-            for display, value in get_model_options(provider, mode)
+            for display, value in get_selectable_model_options(
+                provider, mode, provider_default_url(provider)
+            )
         ],
         instruction="\n- Use arrow keys to navigate\n- Press Enter to select",
         style=questionary.Style(

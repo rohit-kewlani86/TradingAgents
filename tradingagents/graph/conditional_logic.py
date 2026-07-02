@@ -13,11 +13,10 @@ class ConditionalLogic:
 
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
+        last_message = state["market_messages"][-1]
         if last_message.tool_calls:
             return "tools_market"
-        return "Msg Clear Market"
+        return "Market Done"
 
     def should_continue_social(self, state: AgentState):
         """Determine if sentiment-analyst tool round should continue.
@@ -27,27 +26,38 @@ class ConditionalLogic:
         back-compat); the returned ``clear_node`` label uses the v0.2.5
         rename so it matches the node registered by the execution plan.
         """
-        messages = state["messages"]
-        last_message = messages[-1]
+        last_message = state["social_messages"][-1]
         if last_message.tool_calls:
             return "tools_social"
-        return "Msg Clear Sentiment"
+        return "Sentiment Done"
 
     def should_continue_news(self, state: AgentState):
         """Determine if news analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
+        last_message = state["news_messages"][-1]
         if last_message.tool_calls:
             return "tools_news"
-        return "Msg Clear News"
+        return "News Done"
 
     def should_continue_fundamentals(self, state: AgentState):
         """Determine if fundamentals analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
+        last_message = state["fundamentals_messages"][-1]
         if last_message.tool_calls:
             return "tools_fundamentals"
-        return "Msg Clear Fundamentals"
+        return "Fundamentals Done"
+
+    def should_continue_technical(self, state: AgentState):
+        """Determine if technical analysis should continue."""
+        last_message = state["technical_messages"][-1]
+        if last_message.tool_calls:
+            return "tools_technical"
+        return "Technical Done"
+
+    def should_continue_macro(self, state: AgentState):
+        """Determine if macro analysis should continue."""
+        last_message = state["macro_messages"][-1]
+        if last_message.tool_calls:
+            return "tools_macro"
+        return "Macro Done"
 
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""
@@ -65,7 +75,9 @@ class ConditionalLogic:
         if (
             state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds
         ):  # 3 rounds of back-and-forth between 3 agents
-            return "Portfolio Manager"
+            # The Devil's Advocate red-teams the emerging decision before the
+            # Portfolio Manager finalises it.
+            return "Devil's Advocate"
         if state["risk_debate_state"]["latest_speaker"].startswith("Aggressive"):
             return "Conservative Analyst"
         if state["risk_debate_state"]["latest_speaker"].startswith("Conservative"):

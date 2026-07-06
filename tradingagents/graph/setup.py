@@ -18,6 +18,7 @@ from tradingagents.agents import (
     create_portfolio_manager,
     create_position_sizer,
     create_research_manager,
+    create_scenario_analyst,
     create_macro_analyst,
     create_sentiment_analyst,
     create_technical_analyst,
@@ -99,6 +100,7 @@ class GraphSetup:
         bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
         bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
         research_manager_node = create_research_manager(self.deep_thinking_llm)
+        scenario_analyst_node = create_scenario_analyst(self.deep_thinking_llm)
         trader_node = create_trader(self.quick_thinking_llm)
 
         # Create risk analysis nodes
@@ -126,6 +128,7 @@ class GraphSetup:
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
+        workflow.add_node("Scenario Analyst", scenario_analyst_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
@@ -170,7 +173,10 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        workflow.add_edge("Research Manager", "Trader")
+        # The Scenario Analyst quantifies bull/base/bear outcomes between the
+        # Research Manager's synthesis and the Trader's plan.
+        workflow.add_edge("Research Manager", "Scenario Analyst")
+        workflow.add_edge("Scenario Analyst", "Trader")
         workflow.add_edge("Trader", "Aggressive Analyst")
         workflow.add_conditional_edges(
             "Aggressive Analyst",

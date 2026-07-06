@@ -66,7 +66,7 @@ app = typer.Typer(
 class MessageBuffer:
     # Fixed teams that always run (not user-selectable)
     FIXED_AGENTS = {
-        "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
+        "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager", "Scenario Analyst"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
         "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
@@ -93,6 +93,7 @@ class MessageBuffer:
         "technical_report": ("technical", "Technical Analyst"),
         "macro_report": ("macro", "Macro Analyst"),
         "investment_plan": (None, "Research Manager"),
+        "scenario_report": (None, "Scenario Analyst"),
         "trader_investment_plan": (None, "Trader"),
         "devils_advocate_critique": (None, "Devil's Advocate"),
         "final_trade_decision": (None, "Portfolio Manager"),
@@ -205,6 +206,7 @@ class MessageBuffer:
                 "technical_report": "Technical Analysis",
                 "macro_report": "Macro Analysis",
                 "investment_plan": "Research Team Decision",
+                "scenario_report": "Scenario Analysis",
                 "trader_investment_plan": "Trading Team Plan",
                 "devils_advocate_critique": "Devil's Advocate",
                 "final_trade_decision": "Portfolio Management Decision",
@@ -253,6 +255,11 @@ class MessageBuffer:
         if self.report_sections.get("investment_plan"):
             report_parts.append("## Research Team Decision")
             report_parts.append(f"{self.report_sections['investment_plan']}")
+
+        # Scenario Analyst (quantified bull/base/bear + EV)
+        if self.report_sections.get("scenario_report"):
+            report_parts.append("## Scenario Analysis")
+            report_parts.append(f"{self.report_sections['scenario_report']}")
 
         # Trading Team Reports
         if self.report_sections.get("trader_investment_plan"):
@@ -340,7 +347,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
             "Technical Analyst",
             "Macro Analyst",
         ],
-        "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
+        "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager", "Scenario Analyst"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst", "Devil's Advocate"],
         "Portfolio Management": ["Portfolio Manager", "Position Sizer"],
@@ -869,6 +876,11 @@ def display_complete_report(final_state):
             for title, content in research:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
+    # II-b. Scenario Analyst (quantified bull/base/bear + expected value)
+    if final_state.get("scenario_report"):
+        console.print(Panel("[bold]Scenario Analysis[/bold]", border_style="magenta"))
+        console.print(Panel(Markdown(final_state["scenario_report"]), title="Scenario Analyst", border_style="blue", padding=(1, 2)))
+
     # III. Trading Team
     if final_state.get("trader_investment_plan"):
         console.print(Panel("[bold]III. Trading Team Plan[/bold]", border_style="yellow"))
@@ -1267,6 +1279,16 @@ def run_analysis(checkpoint: bool | None = None):
                         "investment_plan", f"### Research Manager Decision\n{judge}"
                     )
                     update_research_team_status("completed")
+                    # Scenario Analyst runs next (Research Manager -> Scenario -> Trader).
+                    message_buffer.update_agent_status("Scenario Analyst", "in_progress")
+
+            # Scenario Analyst - quantifies bull/base/bear + expected value
+            if chunk.get("scenario_report"):
+                message_buffer.update_report_section(
+                    "scenario_report", chunk["scenario_report"]
+                )
+                if message_buffer.agent_status.get("Scenario Analyst") != "completed":
+                    message_buffer.update_agent_status("Scenario Analyst", "completed")
                     message_buffer.update_agent_status("Trader", "in_progress")
 
             # Trading Team

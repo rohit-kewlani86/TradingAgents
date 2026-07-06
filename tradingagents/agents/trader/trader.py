@@ -24,6 +24,7 @@ def create_trader(llm):
         company_name = state["company_of_interest"]
         instrument_context = get_instrument_context_from_state(state)
         investment_plan = state["investment_plan"]
+        scenario_report = state.get("scenario_report", "")
 
         messages = [
             {
@@ -43,6 +44,9 @@ def create_trader(llm):
                     f"insights from current technical market trends, macroeconomic indicators, and "
                     f"social media sentiment. Use this plan as a foundation for evaluating your next "
                     f"trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n"
+                    f"Quantified scenarios (bull/base/bear targets, probabilities, and "
+                    f"expected value) from the Scenario Analyst:\n{scenario_report}\n\n"
+                    f"Weigh the expected value and the scenario skew alongside the plan. "
                     f"Leverage these insights to make an informed and strategic decision."
                 ),
             },

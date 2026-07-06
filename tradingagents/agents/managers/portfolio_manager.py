@@ -31,6 +31,7 @@ def create_portfolio_manager(llm):
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+        scenario_report = state.get("scenario_report", "")
         devils_advocate_critique = state.get("devils_advocate_critique", "")
 
         past_context = state.get("past_context", "")
@@ -56,6 +57,9 @@ def create_portfolio_manager(llm):
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
+
+**Scenario Analyst — quantified bull/base/bear targets, probabilities, and expected value:**
+{scenario_report}
 {lessons_line}
 **Risk Analysts Debate History:**
 {history}

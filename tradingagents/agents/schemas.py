@@ -243,6 +243,83 @@ def render_position_sizing_plan(plan: PositionSizingPlan) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Scenario Analyst
+# ---------------------------------------------------------------------------
+
+
+class Scenario(BaseModel):
+    """One quantified outcome branch (bull / base / bear)."""
+
+    price_target: float | None = Field(
+        default=None,
+        description="Price target for this scenario in the quote currency.",
+    )
+    probability: float = Field(
+        description=(
+            "Probability of this scenario as a fraction 0-1. The bull, base, and "
+            "bear probabilities should sum to approximately 1."
+        ),
+    )
+    rationale: str = Field(
+        description="One sentence naming the catalyst or condition that drives this scenario.",
+    )
+
+
+class ScenarioAnalysis(BaseModel):
+    """Quantified bull/base/bear scenarios produced by the Scenario Analyst.
+
+    The numeric counterpart to the qualitative bull/bear research debate: price
+    targets with probabilities, from which a probability-weighted expected value
+    is derived. It quantifies the outcome distribution rather than re-arguing the
+    debate in prose.
+    """
+
+    current_price: float | None = Field(
+        default=None,
+        description="Current/last traded price used as the anchor for the targets.",
+    )
+    bull: Scenario
+    base: Scenario
+    bear: Scenario
+    summary: str = Field(
+        description=(
+            "Two to three sentences on the shape of the distribution: where the "
+            "expected value sits versus the current price and what skews it."
+        ),
+    )
+
+
+def render_scenario_analysis(analysis: ScenarioAnalysis) -> str:
+    """Render a ScenarioAnalysis to markdown; expected value is computed here
+    (probability-weighted targets) rather than trusted from the model."""
+    rows = [("Bull", analysis.bull), ("Base", analysis.base), ("Bear", analysis.bear)]
+    lines = [
+        "| Scenario | Probability | Price Target | Rationale |",
+        "|---|---|---|---|",
+    ]
+    for name, scenario in rows:
+        target = "—" if scenario.price_target is None else f"{scenario.price_target}"
+        lines.append(
+            f"| {name} | {scenario.probability * 100:.0f}% | {target} | {scenario.rationale} |"
+        )
+    parts = ["\n".join(lines)]
+
+    if all(scenario.price_target is not None for _, scenario in rows):
+        expected_value = sum(
+            scenario.probability * scenario.price_target for _, scenario in rows
+        )
+        parts.extend(["", f"**Expected Value**: {expected_value:.1f}"])
+        if analysis.current_price:
+            upside = (expected_value - analysis.current_price) / analysis.current_price * 100
+            parts.append(
+                f"**Implied vs current ({analysis.current_price})**: {upside:+.1f}%"
+            )
+
+    parts.extend(["", f"**Summary**: {analysis.summary}"])
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Portfolio Manager
 # ---------------------------------------------------------------------------
 

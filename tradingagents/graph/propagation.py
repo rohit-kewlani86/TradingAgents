@@ -76,6 +76,7 @@ class Propagator:
             "macro_report": "",
             "devils_advocate_critique": "",
             "position_sizing_plan": "",
+            "scenario_report": "",
         }
 
     def get_graph_args(self, callbacks: list | None = None) -> dict[str, Any]:

@@ -549,6 +549,7 @@ class TradingAgentsGraph:
             },
             "devils_advocate_critique": final_state.get("devils_advocate_critique", ""),
             "investment_plan": final_state["investment_plan"],
+            "scenario_report": final_state.get("scenario_report", ""),
             "final_trade_decision": final_state["final_trade_decision"],
             "position_sizing_plan": final_state.get("position_sizing_plan", ""),
         }

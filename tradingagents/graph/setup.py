@@ -108,7 +108,10 @@ class GraphSetup:
         neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
         conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
         portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
-        position_sizer_node = create_position_sizer(self.quick_thinking_llm)
+        # Deep tier (temperature 0.0): the Position Sizer emits numeric levels
+        # (size %, entry, stop, target), so it runs deterministically like the
+        # other decision nodes rather than on the diverse quick tier (0.3).
+        position_sizer_node = create_position_sizer(self.deep_thinking_llm)
         devils_advocate_node = create_devils_advocate(self.deep_thinking_llm)
 
         # Create workflow

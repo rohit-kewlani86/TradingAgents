@@ -64,3 +64,27 @@ def test_wired_after_portfolio_manager():
     assert ("Portfolio Manager", "Position Sizer") in wf.edges
     assert ("Position Sizer", END) in wf.edges
     assert ("Portfolio Manager", END) not in wf.edges
+
+
+@pytest.mark.unit
+def test_position_sizer_runs_on_deterministic_deep_tier(monkeypatch):
+    """The Position Sizer emits numeric levels, so it must run on the deep tier
+    (temperature 0.0) like the other decision nodes — not the quick tier (0.3),
+    which made its size/entry/stop wobble run-to-run."""
+    import tradingagents.graph.setup as setup_mod
+    from tradingagents.graph.conditional_logic import ConditionalLogic
+
+    captured = {}
+
+    def fake_position_sizer(llm):
+        captured["llm"] = llm
+        return lambda state: {}
+
+    monkeypatch.setattr(setup_mod, "create_position_sizer", fake_position_sizer)
+
+    deep = MagicMock(name="deep_thinking_llm")
+    quick = MagicMock(name="quick_thinking_llm")
+    gs = setup_mod.GraphSetup(quick, deep, {"market": MagicMock()}, ConditionalLogic())
+    gs.setup_graph(["market"])
+
+    assert captured["llm"] is deep

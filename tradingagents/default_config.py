@@ -96,13 +96,14 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # and no setting makes LLM output bit-identical across runs (see README).
     "temperature": None,
     # Per-tier sampling temperature. Overrides the global ``temperature`` above
-    # for each LLM tier so the deep-tier judges (Research Manager, Portfolio
-    # Manager) run deterministically at 0.0 while the quick-tier analysts keep
-    # a little diversity at 0.3 — cutting run-to-run variance in the final
-    # decision without making every analyst identical. Set to None to fall back
+    # for each LLM tier. Both tiers default to 0.0 so every agent runs as
+    # deterministically as the model allows — reproducibility is prioritised over
+    # analyst "diversity", since sampling variance was itself a source of
+    # run-to-run recommendation drift. Raise ``quick_think_temperature`` if you
+    # deliberately want more varied analyst exploration. Set to None to fall back
     # to the global ``temperature`` for that tier.
     "deep_think_temperature": 0.0,
-    "quick_think_temperature": 0.3,
+    "quick_think_temperature": 0.0,
     # Per-tier cap on generated tokens. None leaves the provider default in
     # place; a value bounds a runaway generation (an analyst spiralling into a
     # very large response that dominates wall-clock) without touching the deep

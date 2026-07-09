@@ -122,6 +122,52 @@ def _assert_ohlcv_not_stale(
         )
 
 
+def _current_timestamp() -> pd.Timestamp:
+    """Real-time clock, isolated behind a function so tests can freeze it."""
+    return pd.Timestamp.now()
+
+
+def get_settled_bar_cutoff() -> pd.Timestamp:
+    """Latest calendar date whose daily bar can be trusted as fully settled.
+
+    Vendors (yfinance) return the current trading day's bar as in-progress
+    while intraday, and its close/volume keep changing until the session
+    ends. Rather than guess whether "now" is after close, treat the real
+    "today" as always still-forming — only strictly-prior calendar days are
+    settled. This is the single rule both the raw OHLCV path
+    (``get_YFin_data_online``) and the verified snapshot path (``load_ohlcv``)
+    apply, so they can never disagree on which bar is "the" bar for a given
+    as-of date (market-data source-of-truth reconciliation).
+    """
+    return _current_timestamp().normalize() - pd.Timedelta(days=1)
+
+
+def filter_to_settled_bars(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
+    """Keep only rows dated <= curr_date AND on/before the last settled day.
+
+    Handles frames that carry dates either in a ``Date`` column or in a
+    DatetimeIndex, since the raw yfinance ``history()`` frame and the cached
+    ``download()`` frame differ in shape.
+    """
+    if data is None or data.empty:
+        return data
+
+    curr_date_dt = pd.to_datetime(curr_date, errors="coerce")
+    settled_cutoff = get_settled_bar_cutoff()
+    cutoff = settled_cutoff if pd.isna(curr_date_dt) else min(curr_date_dt.normalize(), settled_cutoff)
+
+    if "Date" in data.columns:
+        dates = pd.to_datetime(data["Date"], errors="coerce")
+        return data[dates.notna() & (dates.dt.normalize() <= cutoff)]
+
+    if isinstance(data.index, pd.DatetimeIndex):
+        idx_dates = pd.to_datetime(data.index, errors="coerce")
+        mask = (~idx_dates.isna()) & (idx_dates.normalize() <= cutoff)
+        return data.loc[mask]
+
+    return data
+
+
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
@@ -182,8 +228,9 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
 
     data = _clean_dataframe(data)
 
-    # Filter to curr_date to prevent look-ahead bias in backtesting
-    data = data[data["Date"] <= curr_date_dt]
+    # Filter to curr_date (no look-ahead) AND drop a still-forming current-day
+    # bar (source-of-truth reconciliation with get_YFin_data_online).
+    data = filter_to_settled_bars(data, curr_date)
 
     # Reject a stale frame (latest row far older than curr_date) rather than
     # feeding year-old prices into indicators (#1021).

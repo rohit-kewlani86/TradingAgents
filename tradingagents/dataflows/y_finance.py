@@ -9,6 +9,7 @@ from .stockstats_utils import (
     StockstatsUtils,
     _assert_ohlcv_not_stale,
     filter_financials_by_date,
+    filter_to_settled_bars,
     load_ohlcv,
     yf_retry,
 )
@@ -45,6 +46,17 @@ def get_YFin_data_online(
     # Remove timezone info from index for cleaner output
     if data.index.tz is not None:
         data.index = data.index.tz_localize(None)
+
+    # Drop a still-forming current-day bar before it can be reported as a
+    # final close. Yahoo's current-day row changes intraday; excluding it
+    # is what keeps this raw CSV path in agreement with the verified
+    # snapshot path (load_ohlcv applies the identical rule) for the same
+    # (symbol, as-of date) — source-of-truth reconciliation.
+    data = filter_to_settled_bars(data, end_date)
+    if data.empty:
+        raise NoMarketDataError(
+            symbol, canonical, f"no settled rows on or before {end_date}"
+        )
 
     # Reject a stale frame (e.g. a year-old partial response) before it is
     # formatted into the report. Raises NoMarketDataError, which the router

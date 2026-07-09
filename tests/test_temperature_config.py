@@ -95,7 +95,9 @@ class TestPerTierTemperature:
     def test_default_config_has_per_tier_temperatures(self):
         from tradingagents.default_config import DEFAULT_CONFIG
         assert DEFAULT_CONFIG["deep_think_temperature"] == 0.0
-        assert DEFAULT_CONFIG["quick_think_temperature"] == 0.3
+        # Both tiers default to 0.0 for reproducibility (sampling variance was a
+        # source of run-to-run drift). The mechanism still forwards any value.
+        assert DEFAULT_CONFIG["quick_think_temperature"] == 0.0
 
     def test_deep_tier_uses_deep_temperature(self):
         cfg = {"deep_think_temperature": 0.0, "quick_think_temperature": 0.3}

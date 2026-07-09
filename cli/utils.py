@@ -99,6 +99,33 @@ def filter_analysts_for_asset_type(
     ]
 
 
+def _is_weekend(date) -> bool:
+    """Whether a date falls on Saturday or Sunday."""
+    return date.weekday() >= 5
+
+
+def last_completed_session(
+    reference_date: str, holidays: frozenset | None = None
+) -> str:
+    """Return the last COMPLETED trading session on or before `reference_date`.
+
+    The reference day itself is never returned: its daily bar may still be
+    forming (intraday price/volume/news keep changing), which is what makes
+    same-day runs non-reproducible. Weekends are treated as non-trading days.
+
+    `holidays` is an optional set of ``YYYY-MM-DD`` strings reserved for a
+    future US-market-holiday calendar; when omitted, only weekends are
+    skipped.
+    """
+    from datetime import datetime, timedelta
+
+    holidays = holidays or frozenset()
+    current = datetime.strptime(reference_date, "%Y-%m-%d").date() - timedelta(days=1)
+    while _is_weekend(current) or current.isoformat() in holidays:
+        current -= timedelta(days=1)
+    return current.isoformat()
+
+
 def get_analysis_date() -> str:
     """Prompt the user to enter a date in YYYY-MM-DD format."""
     import re

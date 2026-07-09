@@ -32,6 +32,7 @@ from cli.utils import (
     detect_asset_type,
     ensure_api_key,
     get_ticker,
+    last_completed_session,
     prompt_openai_compatible_url,
     resolve_backend_url,
     select_analysts,
@@ -549,8 +550,11 @@ def get_user_selections():
             f"[green]Detected asset type:[/green] {asset_type.value}"
         )
 
-    # Step 2: Analysis date
-    default_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Step 2: Analysis date. Defaults to the last COMPLETED trading session
+    # (not today) since the current day's bar is still forming and would
+    # make the run non-reproducible (#settled-trade-date).
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    default_date = last_completed_session(today_str)
     console.print(
         create_question_box(
             "Step 2: Analysis Date",
@@ -728,18 +732,35 @@ def get_user_selections():
     }
 
 
-def get_analysis_date():
-    """Get the analysis date from user input."""
+def get_analysis_date(today: str | None = None) -> str:
+    """Get the analysis date from user input.
+
+    Defaults to the last COMPLETED trading session so a normal run never
+    analyzes the still-forming current day. The user may still explicitly
+    enter today's date; when they do, a warning is printed (not blocked)
+    since intraday data is not settled and the run won't be reproducible.
+
+    `today` is accepted so callers/tests can inject a fixed reference date
+    instead of relying on `datetime.now()`.
+    """
+    today = today or datetime.datetime.now().strftime("%Y-%m-%d")
+    today_date = datetime.datetime.strptime(today, "%Y-%m-%d").date()
+    default_date = last_completed_session(today)
+
     while True:
-        date_str = typer.prompt(
-            "", default=datetime.datetime.now().strftime("%Y-%m-%d")
-        )
+        date_str = typer.prompt("", default=default_date)
         try:
             # Validate date format and ensure it's not in the future
             analysis_date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            if analysis_date.date() > datetime.datetime.now().date():
+            if analysis_date.date() > today_date:
                 console.print("[red]Error: Analysis date cannot be in the future[/red]")
                 continue
+            if date_str == today:
+                console.print(
+                    "[yellow]Warning: today's session is still in progress — "
+                    "intraday price/volume/news are not settled, so results "
+                    "will not be reproducible.[/yellow]"
+                )
             return date_str
         except ValueError:
             console.print(

@@ -10,6 +10,7 @@ from datetime import datetime
 import pytest
 
 import tradingagents.dataflows.yfinance_news as ynews
+from tradingagents.dataflows.config import set_config
 
 
 def _epoch(date_str):
@@ -46,8 +47,13 @@ def test_window_keeps_undated_in_live_window():
 
 
 @pytest.mark.unit
-def test_global_news_future_flat_article_excluded(monkeypatch):
+def test_global_news_future_flat_article_excluded(monkeypatch, tmp_path):
     # #1007: a flat, future-dated global article must not appear in a historical run.
+    # Isolated cache dir: the news cache now keys on (curr_date, look_back_days,
+    # limit), which is identical to the params used by the sibling
+    # empty-after-filter test below — each test needs its own cache dir so one
+    # doesn't serve the other's cached (and here, mocked) result.
+    set_config({"data_cache_dir": str(tmp_path)})
     future_article = {"title": "FUTURE EVENT", "publisher": "P", "link": "l",
                       "providerPublishTime": _epoch("2025-06-01")}
     past_article = {"title": "PAST EVENT", "publisher": "P", "link": "l",
@@ -64,8 +70,9 @@ def test_global_news_future_flat_article_excluded(monkeypatch):
 
 
 @pytest.mark.unit
-def test_global_news_empty_after_filter_is_informative(monkeypatch):
+def test_global_news_empty_after_filter_is_informative(monkeypatch, tmp_path):
     # #993: everything filtered out -> a clear message, not a blank-bodied report.
+    set_config({"data_cache_dir": str(tmp_path)})
     only_future = {"title": "FUTURE", "publisher": "P", "link": "l",
                    "providerPublishTime": _epoch("2025-06-01")}
 

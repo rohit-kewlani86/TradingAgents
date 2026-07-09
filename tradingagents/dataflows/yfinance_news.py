@@ -1,12 +1,14 @@
 """yfinance-based news data fetching functions."""
 
 import contextlib
+import hashlib
 from datetime import datetime
 
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 
 from .config import get_config
+from .news_cache import get_or_fetch
 from .stockstats_utils import yf_retry
 from .symbol_utils import normalize_symbol
 
@@ -95,7 +97,17 @@ def get_news_yfinance(
     resolved = "" if canonical == ticker else f" (resolved to {canonical})"
     try:
         stock = yf.Ticker(canonical)
-        news = yf_retry(lambda: stock.get_news(count=article_limit))
+        # Cache the raw vendor response per (ticker, as-of window). Yahoo's
+        # "latest N" news endpoint has no historical query — repeated calls
+        # for the *same* window can silently return a different snapshot as
+        # time passes, which is the root cause of two runs for the same
+        # ticker/date reaching different bull/bear conclusions. Caching the
+        # first fetch makes every rerun for this (ticker, start, end) key
+        # byte-identical.
+        news = get_or_fetch(
+            ("ticker-news", canonical, start_date, end_date),
+            lambda: yf_retry(lambda: stock.get_news(count=article_limit)),
+        )
 
         if not news:
             return f"No news found for {ticker}{resolved}"
@@ -131,6 +143,44 @@ def get_news_yfinance(
         return f"Error fetching news for {ticker}: {str(e)}"
 
 
+def _search_global_news_articles(search_queries: list[str], limit: int) -> list[dict]:
+    """Run the configured queries against yfinance Search and dedupe by title.
+
+    Extracted from ``get_global_news_yfinance`` so the raw article pool can be
+    cached: the search itself has no historical anchoring (it always returns
+    Yahoo's current "latest" matches), so without caching a rerun on the same
+    trade date can pull a different pool minutes later.
+    """
+    all_news: list[dict] = []
+    seen_titles = set()
+
+    for query in search_queries:
+        search = yf_retry(lambda q=query: yf.Search(
+            query=q,
+            news_count=limit,
+            enable_fuzzy_query=True,
+        ))
+
+        if search.news:
+            for article in search.news:
+                # Handle both flat and nested structures
+                if "content" in article:
+                    data = _extract_article_data(article)
+                    title = data["title"]
+                else:
+                    title = article.get("title", "")
+
+                # Deduplicate by title
+                if title and title not in seen_titles:
+                    seen_titles.add(title)
+                    all_news.append(article)
+
+        if len(all_news) >= limit:
+            break
+
+    return all_news
+
+
 def get_global_news_yfinance(
     curr_date: str,
     look_back_days: int | None = None,
@@ -155,34 +205,18 @@ def get_global_news_yfinance(
     if limit is None:
         limit = config["global_news_article_limit"]
     search_queries = config["global_news_queries"]
-
-    all_news = []
-    seen_titles = set()
+    # Queries are config-driven, not part of the function signature, but a
+    # different query set must not reuse another config's cached pool for the
+    # same date — fold a short digest of the queries into the cache key.
+    queries_digest = hashlib.sha1(
+        "|".join(search_queries).encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:8]
 
     try:
-        for query in search_queries:
-            search = yf_retry(lambda q=query: yf.Search(
-                query=q,
-                news_count=limit,
-                enable_fuzzy_query=True,
-            ))
-
-            if search.news:
-                for article in search.news:
-                    # Handle both flat and nested structures
-                    if "content" in article:
-                        data = _extract_article_data(article)
-                        title = data["title"]
-                    else:
-                        title = article.get("title", "")
-
-                    # Deduplicate by title
-                    if title and title not in seen_titles:
-                        seen_titles.add(title)
-                        all_news.append(article)
-
-            if len(all_news) >= limit:
-                break
+        all_news = get_or_fetch(
+            ("global-news", curr_date, str(look_back_days), str(limit), queries_digest),
+            lambda: _search_global_news_articles(search_queries, limit),
+        )
 
         if not all_news:
             return f"No global news found for {curr_date}"

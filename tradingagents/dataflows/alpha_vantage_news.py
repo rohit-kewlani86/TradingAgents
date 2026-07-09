@@ -1,10 +1,16 @@
 from .alpha_vantage_common import _make_api_request, format_datetime_for_api
+from .news_cache import get_or_fetch
 
 
 def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
     """Returns live and historical market news & sentiment data from premier news outlets worldwide.
 
     Covers stocks, cryptocurrencies, forex, and topics like fiscal policy, mergers & acquisitions, IPOs.
+
+    The window is already anchored to ``start_date``/``end_date`` via
+    ``time_from``/``time_to`` — the request is cached per (ticker, start_date,
+    end_date) so a rerun for the same as-of window returns the exact same
+    response instead of a fresh (and potentially different) vendor call.
 
     Args:
         ticker: Stock symbol for news articles.
@@ -21,12 +27,21 @@ def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
         "time_to": format_datetime_for_api(end_date),
     }
 
-    return _make_api_request("NEWS_SENTIMENT", params)
+    return get_or_fetch(
+        ("av-ticker-news", ticker, start_date, end_date),
+        lambda: _make_api_request("NEWS_SENTIMENT", params),
+    )
 
 def get_global_news(curr_date, look_back_days: int = 7, limit: int = 50) -> dict[str, str] | str:
     """Returns global market news & sentiment data without ticker-specific filtering.
 
     Covers broad market topics like financial markets, economy, and more.
+
+    The window is anchored to ``curr_date`` (the as-of/trade date) via
+    ``time_from``/``time_to`` — the request is cached per (curr_date,
+    look_back_days, limit) so a rerun for the same as-of window returns the
+    exact same response instead of a fresh (and potentially different)
+    vendor call.
 
     Args:
         curr_date: Current date in yyyy-mm-dd format.
@@ -50,7 +65,10 @@ def get_global_news(curr_date, look_back_days: int = 7, limit: int = 50) -> dict
         "limit": str(limit),
     }
 
-    return _make_api_request("NEWS_SENTIMENT", params)
+    return get_or_fetch(
+        ("av-global-news", curr_date, str(look_back_days), str(limit)),
+        lambda: _make_api_request("NEWS_SENTIMENT", params),
+    )
 
 
 def get_insider_transactions(symbol: str) -> dict[str, str] | str:

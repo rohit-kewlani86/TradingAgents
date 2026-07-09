@@ -10,6 +10,7 @@ import pandas as pd
 import tradingagents.agents.utils.agent_utils as au
 import tradingagents.dataflows.yfinance_news as ynews
 import tradingagents.graph.trading_graph as tg
+from tradingagents.dataflows.config import set_config
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
@@ -55,7 +56,9 @@ def test_fetch_returns_normalizes_symbol(monkeypatch):
     assert raw is not None and days is not None
 
 
-def test_news_lookup_normalizes_symbol(monkeypatch):
+def test_news_lookup_normalizes_symbol(monkeypatch, tmp_path):
+    # Isolate the news cache so this test never touches the real cache dir.
+    set_config({"data_cache_dir": str(tmp_path)})
     seen = {}
 
     class FakeTicker:

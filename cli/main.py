@@ -311,6 +311,61 @@ def format_tokens(n):
     return str(n)
 
 
+def progress_focus_index(statuses: list[str]) -> int:
+    """Index of the agent the progress window should follow.
+
+    Prefers the FIRST in-progress agent (parallel analysts are all in progress
+    at once, so anchoring on the first keeps the whole active cluster on screen
+    from the top), then the first pending agent, else the final row when
+    everything has completed.
+    """
+    in_progress = [i for i, s in enumerate(statuses) if s == "in_progress"]
+    if in_progress:
+        return in_progress[0]
+    pending = [i for i, s in enumerate(statuses) if s == "pending"]
+    if pending:
+        return pending[0]
+    return max(0, len(statuses) - 1)
+
+
+def select_visible_progress_rows(rows, focus_index, max_rows):
+    """Return ``(visible_rows, hidden_above, hidden_below)``.
+
+    A window of at most ``max_rows`` rows anchored so ``rows[focus_index]`` sits
+    at (or one row below) the top. Top-anchoring — rather than centering — keeps
+    the active agent visible even when Rich crops the panel to a height smaller
+    than ``max_rows`` (it crops from the bottom), which is what let the later
+    teams disappear before.
+    """
+    total = len(rows)
+    if max_rows <= 0 or total <= max_rows:
+        return list(rows), 0, 0
+    start = min(max(0, focus_index), total - 1)   # focus is the first visible row
+    end = min(total, start + max_rows)
+    return list(rows[start:end]), start, total - end
+
+
+def progress_viewport_rows(console_height: int) -> int:
+    """Approximate how many agent rows fit in the progress panel.
+
+    Mirrors the layout split (header/footer size 3 each; main split
+    upper:analysis = 3:8) minus the panel chrome, floored so a usable window is
+    always shown even on short terminals.
+    """
+    main_h = max(0, console_height - 6)      # header(3) + footer(3)
+    upper_h = main_h * 3 // 8                 # upper ratio 3 of main's 8
+    inner = upper_h - 6                       # panel border/padding + header + indicators
+    return max(6, inner)
+
+
+def _render_status_cell(status: str):
+    """A spinner for in-progress agents, colored text otherwise."""
+    if status == "in_progress":
+        return Spinner("dots", text="[blue]in_progress[/blue]", style="bold cyan")
+    color = {"pending": "yellow", "completed": "green", "error": "red"}.get(status, "white")
+    return f"[{color}]{status}[/{color}]"
+
+
 def update_display(layout, spinner_text=None, stats_handler=None, start_time=None):
     # Header with welcome message
     layout["header"].update(
@@ -361,46 +416,48 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         if active_agents:
             teams[team] = active_agents
 
-    for team, agents in teams.items():
-        # Add first agent with team name
-        first_agent = agents[0]
-        status = message_buffer.agent_status.get(first_agent, "pending")
-        if status == "in_progress":
-            spinner = Spinner(
-                "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-            )
-            status_cell = spinner
-        else:
-            status_color = {
-                "pending": "yellow",
-                "completed": "green",
-                "error": "red",
-            }.get(status, "white")
-            status_cell = f"[{status_color}]{status}[/{status_color}]"
-        progress_table.add_row(team, first_agent, status_cell)
+    # Flatten to (team, agent, status) so the panel can render a window that
+    # follows the active agent instead of clipping the later teams off a
+    # fixed-height panel (#progress-scroll).
+    flat_rows = [
+        (team, agent, message_buffer.agent_status.get(agent, "pending"))
+        for team, agents in teams.items()
+        for agent in agents
+    ]
 
-        # Add remaining agents in team
-        for agent in agents[1:]:
-            status = message_buffer.agent_status.get(agent, "pending")
-            if status == "in_progress":
-                spinner = Spinner(
-                    "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-                )
-                status_cell = spinner
+    hidden_above = hidden_below = 0
+    if flat_rows:
+        focus = progress_focus_index([s for _, _, s in flat_rows])
+        max_rows = progress_viewport_rows(console.size.height)
+        visible, hidden_above, hidden_below = select_visible_progress_rows(
+            flat_rows, focus, max_rows
+        )
+
+        prev_team = None
+        for team, agent, status in visible:
+            # Team label on the first visible row of each team (even when the
+            # window starts mid-team); a rule separates teams.
+            if team != prev_team:
+                if prev_team is not None:
+                    progress_table.add_row("─" * 20, "─" * 20, "─" * 20, style="dim")
+                team_label = team
             else:
-                status_color = {
-                    "pending": "yellow",
-                    "completed": "green",
-                    "error": "red",
-                }.get(status, "white")
-                status_cell = f"[{status_color}]{status}[/{status_color}]"
-            progress_table.add_row("", agent, status_cell)
+                team_label = ""
+            prev_team = team
+            progress_table.add_row(team_label, agent, _render_status_cell(status))
 
-        # Add horizontal line after each team
-        progress_table.add_row("─" * 20, "─" * 20, "─" * 20, style="dim")
-
+    # Off-screen counts go in the panel title/subtitle rather than table rows, so
+    # the active agent stays the first content row and survives Rich's crop.
+    title = "Progress" if not hidden_above else f"Progress   [dim]▲ {hidden_above} above[/dim]"
+    subtitle = f"[dim]▼ {hidden_below} more below[/dim]" if hidden_below else None
     layout["progress"].update(
-        Panel(progress_table, title="Progress", border_style="cyan", padding=(1, 2))
+        Panel(
+            progress_table,
+            title=title,
+            subtitle=subtitle,
+            border_style="cyan",
+            padding=(0, 1),
+        )
     )
 
     # Messages panel showing recent messages and tool calls

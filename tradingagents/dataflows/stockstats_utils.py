@@ -157,15 +157,39 @@ def filter_to_settled_bars(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
     cutoff = settled_cutoff if pd.isna(curr_date_dt) else min(curr_date_dt.normalize(), settled_cutoff)
 
     if "Date" in data.columns:
-        dates = pd.to_datetime(data["Date"], errors="coerce")
-        return data[dates.notna() & (dates.dt.normalize() <= cutoff)]
+        dates = pd.to_datetime(data["Date"], errors="coerce").dt.normalize()
+        mask = dates.notna() & (dates <= cutoff)
+        filtered = data[mask]
+        latest = dates[mask].max() if mask.any() else pd.NaT
+    elif isinstance(data.index, pd.DatetimeIndex):
+        idx_dates = pd.to_datetime(data.index, errors="coerce").normalize()
+        mask = (~idx_dates.isna()) & (idx_dates <= cutoff)
+        filtered = data.loc[mask]
+        latest = idx_dates[mask].max() if mask.any() else pd.NaT
+    else:
+        return data
 
-    if isinstance(data.index, pd.DatetimeIndex):
-        idx_dates = pd.to_datetime(data.index, errors="coerce")
-        mask = (~idx_dates.isna()) & (idx_dates.normalize() <= cutoff)
-        return data.loc[mask]
+    _warn_if_requested_bar_missing(curr_date_dt, settled_cutoff, latest)
+    return filtered
 
-    return data
+
+def _warn_if_requested_bar_missing(requested, settled_cutoff, latest_available) -> None:
+    """Surface the #4 drift: the requested date is a should-be-settled trading
+    day, but the vendor has not published its bar yet, so we are pricing an
+    earlier day. Without this warning an early-morning run silently prices a
+    different session than a later run once the bar posts."""
+    if pd.isna(requested) or pd.isna(latest_available):
+        return
+    requested = requested.normalize()
+    if requested <= settled_cutoff and latest_available < requested:
+        logger.warning(
+            "Requested trade date %s has no published daily bar yet; pricing the "
+            "latest settled bar %s instead. Results are not reproducible until the "
+            "vendor posts %s — re-run then for a stable analysis.",
+            requested.date(),
+            latest_available.date(),
+            requested.date(),
+        )
 
 
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:

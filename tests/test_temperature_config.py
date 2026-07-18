@@ -120,10 +120,13 @@ class TestPerTierTemperature:
 
 @pytest.mark.unit
 class TestDebateRoundDefaults:
-    def test_default_debate_rounds_is_two(self):
+    def test_default_debate_rounds_is_one(self):
+        # One round keeps the number of sequential LLM stages down, reducing the
+        # surface over which non-deterministic text compounds into different
+        # final recommendations.
         from tradingagents.default_config import DEFAULT_CONFIG
-        assert DEFAULT_CONFIG["max_debate_rounds"] == 2
+        assert DEFAULT_CONFIG["max_debate_rounds"] == 1
 
-    def test_default_risk_rounds_is_two(self):
+    def test_default_risk_rounds_is_one(self):
         from tradingagents.default_config import DEFAULT_CONFIG
-        assert DEFAULT_CONFIG["max_risk_discuss_rounds"] == 2
+        assert DEFAULT_CONFIG["max_risk_discuss_rounds"] == 1

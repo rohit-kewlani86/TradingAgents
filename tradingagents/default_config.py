@@ -123,8 +123,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
     # Debate and discussion settings
-    "max_debate_rounds": 2,
-    "max_risk_discuss_rounds": 2,
+    # One round each: every extra debate/risk round adds sequential LLM stages
+    # whose (temperature-0 but still non-deterministic) text compounds into
+    # different final recommendations. Fewer stages = smaller variance surface.
+    "max_debate_rounds": 1,
+    "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,
     # News / data fetching parameters
     # Increase for longer lookback strategies or to broaden macro coverage;
